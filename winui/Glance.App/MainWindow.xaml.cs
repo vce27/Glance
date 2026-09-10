@@ -18,7 +18,6 @@ public sealed partial class MainWindow : Window
 
         SystemBackdrop = new MicaBackdrop { Kind = Microsoft.UI.Composition.SystemBackdrops.MicaKind.Base };
 
-        // Compact default — text boxes stretch; settings expands height.
         AppWindow.Resize(new Windows.Graphics.SizeInt32(560, 280));
         RootFrame.Navigate(typeof(MainPage));
 
@@ -30,6 +29,10 @@ public sealed partial class MainWindow : Window
         };
     }
 
+    /// <summary>
+    /// Runtime theme switch: only FrameworkElement.RequestedTheme.
+    /// Never touch Application.RequestedTheme after launch (throws 0x80131515).
+    /// </summary>
     public void ApplyUiTheme(string? theme)
     {
         var elementTheme = string.Equals(theme, "dark", StringComparison.OrdinalIgnoreCase)
@@ -37,7 +40,8 @@ public sealed partial class MainWindow : Window
             : ElementTheme.Light;
         if (Content is FrameworkElement root)
             root.RequestedTheme = elementTheme;
-        App.ApplyAppTheme(theme);
+        if (RootFrame.Content is FrameworkElement page)
+            page.RequestedTheme = elementTheme;
     }
 
     public void SetContentHeight(bool settingsOpen)

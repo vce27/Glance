@@ -116,10 +116,22 @@ public sealed partial class MainPage : Page
         LlmApiKeyBox.Password = _settings.LlmConfig.ApiKey;
         LlmModelBox.Text = _settings.LlmConfig.Model;
         ApplyProxyUi();
+        ApplyCaptureButtonStyle();
         HighlightEngine();
         UpdateEngineDependentUi();
         _services.ApplyPin(_settings.PinOnTop);
         _loadingUi = false;
+    }
+
+    private void ApplyCaptureButtonStyle()
+    {
+        if (Application.Current.Resources.TryGetValue("GlanceAccentBrush", out var brush) &&
+            brush is Brush accent)
+        {
+            CaptureButton.Background = accent;
+            CaptureButton.Foreground = new SolidColorBrush(Microsoft.UI.Colors.White);
+            CaptureButton.BorderBrush = accent;
+        }
     }
 
     private void ApplyProxyUi()
@@ -141,18 +153,21 @@ public sealed partial class MainPage : Page
 
     private void HighlightEngine()
     {
+        Application.Current.Resources.TryGetValue("GlanceAccentBrush", out var accentObj);
+        var accent = accentObj as Brush;
         foreach (var item in EngineList.Children)
         {
             if (item is not Button btn || btn.Tag is not TextTranslateEngine eng) continue;
-            try
+            var selected = eng == _settings.TextTranslateEngine;
+            if (selected && accent is not null)
             {
-                btn.Style = eng == _settings.TextTranslateEngine
-                    ? (Style)Application.Current.Resources["GlancePrimaryButtonStyle"]
-                    : (Style)Application.Current.Resources["GlanceGhostButtonStyle"];
+                btn.Background = accent;
+                btn.Foreground = new SolidColorBrush(Microsoft.UI.Colors.White);
             }
-            catch
+            else
             {
-                // Styles may be unavailable in some themes; ignore.
+                btn.ClearValue(Control.BackgroundProperty);
+                btn.ClearValue(Control.ForegroundProperty);
             }
         }
     }
@@ -257,15 +272,18 @@ public sealed partial class MainPage : Page
 
     private void UpdatePinVisual()
     {
-        // Legacy Glance: selected pin = accent tint, not solid blue fill.
-        if (PinButton.IsChecked == true)
+        // Legacy Glance: selected pin = soft accent tint, not solid blue fill.
+        if (PinButton.IsChecked == true &&
+            Application.Current.Resources.TryGetValue("GlanceAccentSoftBrush", out var soft) &&
+            Application.Current.Resources.TryGetValue("GlanceAccentBrush", out var accent) &&
+            soft is Brush softBrush && accent is Brush accentBrush)
         {
-            PinButton.Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["AccentSoftBrush"];
-            PinButton.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemAccentBrush"];
+            PinButton.Background = softBrush;
+            PinButton.Foreground = accentBrush;
         }
         else
         {
-            PinButton.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            PinButton.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
             PinButton.ClearValue(Control.ForegroundProperty);
         }
     }

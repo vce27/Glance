@@ -38,7 +38,6 @@
                 Grid.Column="1"
                 Click="OnSwapLang"
                 Content="⇄"
-                Style="{StaticResource GlanceGhostButtonStyle}"
                 ToolTipService.ToolTip="交换语言" />
             <ComboBox
                 x:Name="ToLangBox"
@@ -51,34 +50,29 @@
                 Grid.Column="3"
                 Click="OnTtsClick"
                 Content="🔊"
-                Style="{StaticResource GlanceGhostButtonStyle}"
                 ToolTipService.ToolTip="朗读原文" />
             <ToggleButton
                 x:Name="PinButton"
                 Grid.Column="4"
                 Click="OnPinClick"
                 Content="📌"
-                Style="{StaticResource GlancePinToggleStyle}"
                 ToolTipService.ToolTip="置顶窗口" />
             <Button
                 x:Name="CaptureButton"
                 Grid.Column="5"
                 Click="OnCaptureClick"
-                Content="截屏翻译"
-                Style="{StaticResource GlancePrimaryButtonStyle}" />
+                Content="截屏翻译" />
             <ToggleButton
                 x:Name="ThemeButton"
                 Grid.Column="6"
                 Click="OnThemeToggle"
                 Content="🌙"
-                Style="{StaticResource GlancePinToggleStyle}"
                 ToolTipService.ToolTip="切换浅色/深色主题" />
             <ToggleButton
                 x:Name="SettingsButton"
                 Grid.Column="7"
                 Click="OnSettingsToggle"
                 Content="⚙"
-                Style="{StaticResource GlancePinToggleStyle}"
                 ToolTipService.ToolTip="设置" />
         </Grid>
 
