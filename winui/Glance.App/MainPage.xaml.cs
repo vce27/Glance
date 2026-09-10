@@ -116,22 +116,47 @@ public sealed partial class MainPage : Page
         LlmApiKeyBox.Password = _settings.LlmConfig.ApiKey;
         LlmModelBox.Text = _settings.LlmConfig.Model;
         ApplyProxyUi();
-        ApplyCaptureButtonStyle();
+        ApplyToolbarAccent();
         HighlightEngine();
         UpdateEngineDependentUi();
         _services.ApplyPin(_settings.PinOnTop);
         _loadingUi = false;
     }
 
-    private void ApplyCaptureButtonStyle()
+    private static readonly Windows.UI.Color AccentColor = Windows.UI.Color.FromArgb(0xFF, 0x00, 0x78, 0xD4);
+
+    private Brush AccentBrush => new SolidColorBrush(AccentColor);
+    private Brush WhiteBrush => new SolidColorBrush(Microsoft.UI.Colors.White);
+
+    /// <summary>
+    /// Selected and unselected toolbar controls both use Glance #0078D4
+    /// (screenshot accent), not OS gray / soft tint.
+    /// </summary>
+    private void ApplyToolbarAccent()
     {
-        if (Application.Current.Resources.TryGetValue("GlanceAccentBrush", out var brush) &&
-            brush is Brush accent)
+        var accent = AccentBrush;
+        var white = WhiteBrush;
+
+        void PaintButton(Button btn)
         {
-            CaptureButton.Background = accent;
-            CaptureButton.Foreground = new SolidColorBrush(Microsoft.UI.Colors.White);
-            CaptureButton.BorderBrush = accent;
+            btn.Background = accent;
+            btn.Foreground = white;
+            btn.BorderBrush = accent;
         }
+
+        void PaintToggle(ToggleButton btn)
+        {
+            btn.Background = accent;
+            btn.Foreground = white;
+            btn.BorderBrush = accent;
+        }
+
+        PaintButton(SwapLangButton);
+        PaintButton(TtsButton);
+        PaintButton(CaptureButton);
+        PaintToggle(PinButton);
+        PaintToggle(ThemeButton);
+        PaintToggle(SettingsButton);
     }
 
     private void ApplyProxyUi()
@@ -153,21 +178,24 @@ public sealed partial class MainPage : Page
 
     private void HighlightEngine()
     {
-        Application.Current.Resources.TryGetValue("GlanceAccentBrush", out var accentObj);
-        var accent = accentObj as Brush;
+        var accent = AccentBrush;
+        var white = WhiteBrush;
         foreach (var item in EngineList.Children)
         {
             if (item is not Button btn || btn.Tag is not TextTranslateEngine eng) continue;
             var selected = eng == _settings.TextTranslateEngine;
-            if (selected && accent is not null)
+            btn.BorderBrush = accent;
+            btn.BorderThickness = new Thickness(1);
+            if (selected)
             {
                 btn.Background = accent;
-                btn.Foreground = new SolidColorBrush(Microsoft.UI.Colors.White);
+                btn.Foreground = white;
             }
             else
             {
-                btn.ClearValue(Control.BackgroundProperty);
-                btn.ClearValue(Control.ForegroundProperty);
+                // Unselected: same accent color as outline + text (not gray).
+                btn.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+                btn.Foreground = accent;
             }
         }
     }
@@ -272,20 +300,8 @@ public sealed partial class MainPage : Page
 
     private void UpdatePinVisual()
     {
-        // Legacy Glance: selected pin = soft accent tint, not solid blue fill.
-        if (PinButton.IsChecked == true &&
-            Application.Current.Resources.TryGetValue("GlanceAccentSoftBrush", out var soft) &&
-            Application.Current.Resources.TryGetValue("GlanceAccentBrush", out var accent) &&
-            soft is Brush softBrush && accent is Brush accentBrush)
-        {
-            PinButton.Background = softBrush;
-            PinButton.Foreground = accentBrush;
-        }
-        else
-        {
-            PinButton.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-            PinButton.ClearValue(Control.ForegroundProperty);
-        }
+        // Selected and unselected both use #0078D4 fill (screenshot accent).
+        ApplyToolbarAccent();
     }
 
     private void OnThemeToggle(object sender, RoutedEventArgs e)
