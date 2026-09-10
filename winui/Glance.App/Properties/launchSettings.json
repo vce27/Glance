@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Glance.App (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "Glance.App (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
