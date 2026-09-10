@@ -145,7 +145,18 @@ public sealed class AppServices
 
     public async Task BeginCaptureAsync(CaptureMode mode)
     {
-        // Do not restore main window after capture (parity with Tauri restore_main_window=false).
+        // Hide so the picker isn't blocked by the main window (esp. when pinned
+        // always-on-top). Restore afterward if the window was visible — otherwise
+        // pin + capture feels like the window "vanished".
+        var wasShown = MainWindowShown;
+        var pinned = false;
+        try
+        {
+            var settings = Store.LoadSettings();
+            pinned = settings.PinOnTop;
+        }
+        catch { /* ignore */ }
+
         HideMainWindow();
         try
         {
@@ -154,6 +165,14 @@ public sealed class AppServices
         catch (Exception ex)
         {
             Debug.WriteLine("capture failed: " + ex);
+        }
+        finally
+        {
+            if (wasShown)
+            {
+                ShowMainWindow();
+                ApplyPin(pinned);
+            }
         }
     }
 
