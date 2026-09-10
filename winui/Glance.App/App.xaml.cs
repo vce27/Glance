@@ -10,13 +10,14 @@ public partial class App : Application
     public App()
     {
         InitializeComponent();
+        // Default light; actual theme applied after settings load.
+        RequestedTheme = ApplicationTheme.Light;
     }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         if (!_services.TryTakeSingleInstance())
         {
-            // Second instance: exit; primary stays in tray.
             Exit();
             return;
         }
@@ -24,9 +25,21 @@ public partial class App : Application
         var startMinimized = Environment.GetCommandLineArgs()
             .Any(a => string.Equals(a, AppServices.SilentStartArg, StringComparison.OrdinalIgnoreCase));
 
+        var settings = _services.Store.LoadSettings();
+        ApplyAppTheme(settings.UiTheme);
+
         _window = new MainWindow();
         _services.InitializeShell(_window, startMinimized);
+        _window.ApplyUiTheme(settings.UiTheme);
         if (!startMinimized)
             _window.Activate();
+    }
+
+    public static void ApplyAppTheme(string? theme)
+    {
+        if (Current is not App) return;
+        Current.RequestedTheme = string.Equals(theme, "dark", StringComparison.OrdinalIgnoreCase)
+            ? ApplicationTheme.Dark
+            : ApplicationTheme.Light;
     }
 }

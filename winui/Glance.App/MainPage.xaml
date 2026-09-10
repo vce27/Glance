@@ -8,18 +8,19 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid Padding="16,8,16,16" RowSpacing="12">
+    <Grid Padding="16,8,16,12" RowSpacing="10">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
+            <RowDefinition Height="*" MinHeight="120" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Grid ColumnSpacing="8">
+        <Grid ColumnSpacing="6">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
@@ -30,41 +31,54 @@
                 x:Name="FromLangBox"
                 Grid.Column="0"
                 HorizontalAlignment="Stretch"
+                VerticalAlignment="Center"
                 SelectionChanged="OnLangChanged" />
             <Button
                 x:Name="SwapLangButton"
                 Grid.Column="1"
                 Click="OnSwapLang"
                 Content="⇄"
+                Style="{StaticResource GlanceGhostButtonStyle}"
                 ToolTipService.ToolTip="交换语言" />
             <ComboBox
                 x:Name="ToLangBox"
                 Grid.Column="2"
                 HorizontalAlignment="Stretch"
+                VerticalAlignment="Center"
                 SelectionChanged="OnLangChanged" />
             <Button
                 x:Name="TtsButton"
                 Grid.Column="3"
                 Click="OnTtsClick"
                 Content="🔊"
+                Style="{StaticResource GlanceGhostButtonStyle}"
                 ToolTipService.ToolTip="朗读原文" />
             <ToggleButton
                 x:Name="PinButton"
                 Grid.Column="4"
                 Click="OnPinClick"
                 Content="📌"
+                Style="{StaticResource GlancePinToggleStyle}"
                 ToolTipService.ToolTip="置顶窗口" />
             <Button
                 x:Name="CaptureButton"
                 Grid.Column="5"
                 Click="OnCaptureClick"
                 Content="截屏翻译"
-                Style="{StaticResource AccentButtonStyle}" />
+                Style="{StaticResource GlancePrimaryButtonStyle}" />
+            <ToggleButton
+                x:Name="ThemeButton"
+                Grid.Column="6"
+                Click="OnThemeToggle"
+                Content="🌙"
+                Style="{StaticResource GlancePinToggleStyle}"
+                ToolTipService.ToolTip="切换浅色/深色主题" />
             <ToggleButton
                 x:Name="SettingsButton"
-                Grid.Column="6"
+                Grid.Column="7"
                 Click="OnSettingsToggle"
                 Content="⚙"
+                Style="{StaticResource GlancePinToggleStyle}"
                 ToolTipService.ToolTip="设置" />
         </Grid>
 
@@ -76,42 +90,43 @@
             <TextBox
                 x:Name="InputBox"
                 AcceptsReturn="True"
+                HorizontalAlignment="Stretch"
                 PlaceholderText="输入要翻译的文本…"
                 TextChanged="OnInputChanged"
-                TextWrapping="Wrap" />
+                TextWrapping="Wrap"
+                VerticalAlignment="Stretch" />
             <TextBox
                 x:Name="OutputBox"
                 Grid.Column="1"
                 AcceptsReturn="True"
+                HorizontalAlignment="Stretch"
                 IsReadOnly="True"
                 PlaceholderText="译文"
-                TextWrapping="Wrap" />
+                TextWrapping="Wrap"
+                VerticalAlignment="Stretch" />
         </Grid>
 
-        <ScrollViewer Grid.Row="2" MaxHeight="320">
+        <ScrollViewer
+            x:Name="SettingsScroller"
+            Grid.Row="2"
+            MaxHeight="360"
+            Visibility="Collapsed">
             <Border
                 x:Name="SettingsPanel"
                 Padding="12"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1"
-                CornerRadius="8"
-                Visibility="Collapsed">
+                CornerRadius="8">
                 <StackPanel Spacing="12">
                     <TextBlock FontWeight="SemiBold" Text="设置" />
 
                     <TextBlock Text="文本引擎" />
-                    <GridView
+                    <VariableSizedWrapGrid
                         x:Name="EngineList"
-                        IsItemClickEnabled="True"
-                        ItemClick="OnEngineClick"
-                        SelectionMode="None">
-                        <GridView.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <ItemsWrapGrid MaximumRowsOrColumns="4" Orientation="Horizontal" />
-                            </ItemsPanelTemplate>
-                        </GridView.ItemsPanel>
-                    </GridView>
+                        ItemHeight="40"
+                        ItemWidth="88"
+                        Orientation="Horizontal" />
 
                     <TextBlock Text="代理" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
@@ -131,6 +146,12 @@
                         <TextBox x:Name="LlmModelBox" Header="Model" LostFocus="OnSettingsFieldCommit" />
                     </StackPanel>
 
+                    <ToggleSwitch
+                        x:Name="ThemeSwitch"
+                        Header="深色主题"
+                        OffContent="浅色"
+                        OnContent="深色"
+                        Toggled="OnThemeSwitchToggled" />
                     <ToggleSwitch
                         x:Name="AutostartSwitch"
                         Header="开机自启"

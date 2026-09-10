@@ -58,6 +58,8 @@ public sealed class TranslatorSettings
     public ProxyMode ProxyMode { get; set; } = ProxyMode.System;
     public string CustomProxy { get; set; } = "";
     public bool PinOnTop { get; set; }
+    /// <summary>light | dark</summary>
+    public string UiTheme { get; set; } = "light";
 
     public static string NewYduuid()
     {

@@ -1,6 +1,5 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
-using WinRT.Interop;
 
 namespace Glance.App;
 
@@ -19,16 +18,32 @@ public sealed partial class MainWindow : Window
 
         SystemBackdrop = new MicaBackdrop { Kind = Microsoft.UI.Composition.SystemBackdrops.MicaKind.Base };
 
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(560, 420));
+        // Compact default — text boxes stretch; settings expands height.
+        AppWindow.Resize(new Windows.Graphics.SizeInt32(560, 280));
         RootFrame.Navigate(typeof(MainPage));
 
-        // Close → tray (hide), unless quitting.
         AppWindow.Closing += (_, e) =>
         {
             if (_allowClose) return;
             e.Cancel = true;
             AppServices.Current.HideMainWindow();
         };
+    }
+
+    public void ApplyUiTheme(string? theme)
+    {
+        var elementTheme = string.Equals(theme, "dark", StringComparison.OrdinalIgnoreCase)
+            ? ElementTheme.Dark
+            : ElementTheme.Light;
+        if (Content is FrameworkElement root)
+            root.RequestedTheme = elementTheme;
+        App.ApplyAppTheme(theme);
+    }
+
+    public void SetContentHeight(bool settingsOpen)
+    {
+        var size = AppWindow.Size;
+        AppWindow.Resize(new Windows.Graphics.SizeInt32(size.Width, settingsOpen ? 640 : 280));
     }
 
     public void AllowClose() => _allowClose = true;

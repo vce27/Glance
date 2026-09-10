@@ -2,6 +2,7 @@ using Glance.Capture;
 using Glance.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Windows.Media.Core;
 using Windows.Media.Playback;
 using Windows.Media.SpeechSynthesis;
@@ -91,16 +92,22 @@ public sealed partial class MainPage : Page
                 Tag = engine,
                 Margin = new Thickness(0, 0, 8, 8),
                 MinWidth = 72,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
             };
             btn.Click += OnEngineButtonClick;
-            EngineList.Items.Add(btn);
+            EngineList.Children.Add(btn);
         }
 
         _settings = _services.Store.LoadSettings();
         SelectLang(FromLangBox, _settings.FromLang);
         SelectLang(ToLangBox, _settings.ToLang);
         PinButton.IsChecked = _settings.PinOnTop;
+        UpdatePinVisual();
         AutostartSwitch.IsOn = _settings.Autostart;
+        var dark = string.Equals(_settings.UiTheme, "dark", StringComparison.OrdinalIgnoreCase);
+        ThemeSwitch.IsOn = dark;
+        ThemeButton.IsChecked = dark;
+        ThemeButton.Content = dark ? "☀️" : "🌙";
         HotkeyBox.Text = _settings.Hotkey;
         CopyHotkeyBox.Text = _settings.CopyHotkey;
         PopupHotkeyBox.Text = _settings.PopupShortcut ?? "";
@@ -134,14 +141,14 @@ public sealed partial class MainPage : Page
 
     private void HighlightEngine()
     {
-        foreach (var item in EngineList.Items)
+        foreach (var item in EngineList.Children)
         {
             if (item is not Button btn || btn.Tag is not TextTranslateEngine eng) continue;
             try
             {
                 btn.Style = eng == _settings.TextTranslateEngine
-                    ? (Style)Application.Current.Resources["AccentButtonStyle"]
-                    : (Style)Application.Current.Resources["DefaultButtonStyle"];
+                    ? (Style)Application.Current.Resources["GlancePrimaryButtonStyle"]
+                    : (Style)Application.Current.Resources["GlanceGhostButtonStyle"];
             }
             catch
             {
@@ -158,11 +165,6 @@ public sealed partial class MainPage : Page
         UpdateEngineDependentUi();
         PersistSettings();
         _ = TranslateNowAsync();
-    }
-
-    private void OnEngineClick(object sender, ItemClickEventArgs e)
-    {
-        // Buttons handle their own Click; keep handler for XAML binding.
     }
 
     private void UpdateEngineDependentUi()
@@ -195,6 +197,7 @@ public sealed partial class MainPage : Page
         _settings.ToLang = LangValue(ToLangBox);
         _settings.PinOnTop = PinButton.IsChecked == true;
         _settings.Autostart = AutostartSwitch.IsOn;
+        _settings.UiTheme = ThemeSwitch.IsOn ? "dark" : "light";
         _settings.Hotkey = HotkeyBox.Text.Trim();
         _settings.CopyHotkey = CopyHotkeyBox.Text.Trim();
         var popup = PopupHotkeyBox.Text.Trim();
@@ -248,12 +251,56 @@ public sealed partial class MainPage : Page
     {
         var pinned = PinButton.IsChecked == true;
         _services.ApplyPin(pinned);
+        UpdatePinVisual();
+        PersistSettings();
+    }
+
+    private void UpdatePinVisual()
+    {
+        // Legacy Glance: selected pin = accent tint, not solid blue fill.
+        if (PinButton.IsChecked == true)
+        {
+            PinButton.Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["AccentSoftBrush"];
+            PinButton.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemAccentBrush"];
+        }
+        else
+        {
+            PinButton.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            PinButton.ClearValue(Control.ForegroundProperty);
+        }
+    }
+
+    private void OnThemeToggle(object sender, RoutedEventArgs e)
+    {
+        if (_loadingUi) return;
+        var dark = ThemeButton.IsChecked == true;
+        ThemeSwitch.IsOn = dark;
+        ApplyTheme(dark ? "dark" : "light");
+    }
+
+    private void OnThemeSwitchToggled(object sender, RoutedEventArgs e)
+    {
+        if (_loadingUi) return;
+        var dark = ThemeSwitch.IsOn;
+        ThemeButton.IsChecked = dark;
+        ApplyTheme(dark ? "dark" : "light");
+    }
+
+    private void ApplyTheme(string theme)
+    {
+        _settings.UiTheme = theme;
+        ThemeButton.Content = theme == "dark" ? "☀️" : "🌙";
+        if (AppServices.Current.MainWindow is MainWindow win)
+            win.ApplyUiTheme(theme);
         PersistSettings();
     }
 
     private void OnSettingsToggle(object sender, RoutedEventArgs e)
     {
-        SettingsPanel.Visibility = SettingsButton.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        var open = SettingsButton.IsChecked == true;
+        SettingsScroller.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+        if (AppServices.Current.MainWindow is MainWindow win)
+            win.SetContentHeight(open);
     }
 
     private void OnAutostartToggled(object sender, RoutedEventArgs e) => PersistSettings();
