@@ -2,7 +2,9 @@ using Glance.Capture;
 using Glance.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
+using Windows.Media.Core;
+using Windows.Media.Playback;
+using Windows.Media.SpeechSynthesis;
 
 namespace Glance.App;
 
@@ -22,17 +24,54 @@ public sealed partial class MainPage : Page
         ("es", "西班牙语"),
     ];
 
+    private static readonly (TextTranslateEngine Engine, string Label)[] Engines =
+    [
+        (TextTranslateEngine.Bing, "必应"),
+        (TextTranslateEngine.Google, "Google"),
+        (TextTranslateEngine.Microsoft, "微软"),
+        (TextTranslateEngine.Transmart, "腾讯"),
+        (TextTranslateEngine.Yandex, "Yandex"),
+        (TextTranslateEngine.Iciba, "词霸"),
+        (TextTranslateEngine.Llm, "AI 大模型"),
+    ];
+
+    private static readonly Dictionary<string, string> TtsLangMap = new()
+    {
+        ["zh-CHS"] = "zh-CN",
+        ["zh-CN"] = "zh-CN",
+        ["zh-CHT"] = "zh-TW",
+        ["zh-TW"] = "zh-TW",
+        ["en"] = "en-US",
+        ["ja"] = "ja-JP",
+        ["ko"] = "ko-KR",
+        ["fr"] = "fr-FR",
+        ["de"] = "de-DE",
+        ["ru"] = "ru-RU",
+        ["es"] = "es-ES",
+    };
+
     private readonly AppServices _services;
+    private readonly SpeechSynthesizer _synth = new();
+    private readonly MediaPlayer _mediaPlayer = new();
     private TranslatorSettings _settings = new();
     private int _translateSeq;
     private DispatcherTimer? _debounce;
     private bool _loadingUi;
+    private bool _ttsPlaying;
 
     public MainPage()
     {
         _services = AppServices.Current;
         InitializeComponent();
         Loaded += OnLoaded;
+        _mediaPlayer.MediaEnded += (_, _) =>
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                _ttsPlaying = false;
+                TtsButton.Content = "🔊";
+            });
+        };
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -44,6 +83,19 @@ public sealed partial class MainPage : Page
             ToLangBox.Items.Add(new ComboBoxItem { Content = label, Tag = value });
         }
 
+        foreach (var (engine, label) in Engines)
+        {
+            var btn = new Button
+            {
+                Content = label,
+                Tag = engine,
+                Margin = new Thickness(0, 0, 8, 8),
+                MinWidth = 72,
+            };
+            btn.Click += OnEngineButtonClick;
+            EngineList.Items.Add(btn);
+        }
+
         _settings = _services.Store.LoadSettings();
         SelectLang(FromLangBox, _settings.FromLang);
         SelectLang(ToLangBox, _settings.ToLang);
@@ -52,8 +104,72 @@ public sealed partial class MainPage : Page
         HotkeyBox.Text = _settings.Hotkey;
         CopyHotkeyBox.Text = _settings.CopyHotkey;
         PopupHotkeyBox.Text = _settings.PopupShortcut ?? "";
+        CustomProxyBox.Text = _settings.CustomProxy;
+        LlmBaseUrlBox.Text = _settings.LlmConfig.BaseUrl;
+        LlmApiKeyBox.Password = _settings.LlmConfig.ApiKey;
+        LlmModelBox.Text = _settings.LlmConfig.Model;
+        ApplyProxyUi();
+        HighlightEngine();
+        UpdateEngineDependentUi();
         _services.ApplyPin(_settings.PinOnTop);
         _loadingUi = false;
+    }
+
+    private void ApplyProxyUi()
+    {
+        switch (_settings.ProxyMode)
+        {
+            case ProxyMode.Custom:
+                ProxyCustom.IsChecked = true;
+                break;
+            case ProxyMode.None:
+                ProxyNone.IsChecked = true;
+                break;
+            default:
+                ProxySystem.IsChecked = true;
+                break;
+        }
+        CustomProxyBox.Visibility = _settings.ProxyMode == ProxyMode.Custom ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void HighlightEngine()
+    {
+        foreach (var item in EngineList.Items)
+        {
+            if (item is not Button btn || btn.Tag is not TextTranslateEngine eng) continue;
+            try
+            {
+                btn.Style = eng == _settings.TextTranslateEngine
+                    ? (Style)Application.Current.Resources["AccentButtonStyle"]
+                    : (Style)Application.Current.Resources["DefaultButtonStyle"];
+            }
+            catch
+            {
+                // Styles may be unavailable in some themes; ignore.
+            }
+        }
+    }
+
+    private void OnEngineButtonClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not TextTranslateEngine engine) return;
+        _settings.TextTranslateEngine = engine;
+        HighlightEngine();
+        UpdateEngineDependentUi();
+        PersistSettings();
+        _ = TranslateNowAsync();
+    }
+
+    private void OnEngineClick(object sender, ItemClickEventArgs e)
+    {
+        // Buttons handle their own Click; keep handler for XAML binding.
+    }
+
+    private void UpdateEngineDependentUi()
+    {
+        LlmPanel.Visibility = _settings.TextTranslateEngine == TextTranslateEngine.Llm
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     private static void SelectLang(ComboBox box, string value)
@@ -83,9 +199,32 @@ public sealed partial class MainPage : Page
         _settings.CopyHotkey = CopyHotkeyBox.Text.Trim();
         var popup = PopupHotkeyBox.Text.Trim();
         _settings.PopupShortcut = string.IsNullOrEmpty(popup) ? null : popup;
+        _settings.CustomProxy = CustomProxyBox.Text.Trim();
+        _settings.LlmConfig.BaseUrl = LlmBaseUrlBox.Text.Trim();
+        _settings.LlmConfig.ApiKey = LlmApiKeyBox.Password;
+        _settings.LlmConfig.Model = LlmModelBox.Text.Trim();
         _services.Store.SaveSettings(_settings);
         _services.ApplyAutostart(_settings.Autostart);
         _services.ReregisterHotkeys(_settings);
+    }
+
+    private void OnProxyChanged(object sender, RoutedEventArgs e)
+    {
+        if (_loadingUi) return;
+        if (ProxyCustom.IsChecked == true) _settings.ProxyMode = ProxyMode.Custom;
+        else if (ProxyNone.IsChecked == true) _settings.ProxyMode = ProxyMode.None;
+        else _settings.ProxyMode = ProxyMode.System;
+        CustomProxyBox.Visibility = _settings.ProxyMode == ProxyMode.Custom ? Visibility.Visible : Visibility.Collapsed;
+        PersistSettings();
+    }
+
+    private void OnSettingsFieldCommit(object sender, RoutedEventArgs e) => PersistSettings();
+
+    private void OnLlmApiKeyChanged(object sender, RoutedEventArgs e)
+    {
+        if (_loadingUi) return;
+        _settings.LlmConfig.ApiKey = LlmApiKeyBox.Password;
+        _services.Store.SaveSettings(_settings);
     }
 
     private void OnLangChanged(object sender, SelectionChangedEventArgs e)
@@ -118,7 +257,6 @@ public sealed partial class MainPage : Page
     }
 
     private void OnAutostartToggled(object sender, RoutedEventArgs e) => PersistSettings();
-
     private void OnHotkeyCommit(object sender, RoutedEventArgs e) => PersistSettings();
 
     private async void OnCaptureClick(object sender, RoutedEventArgs e)
@@ -126,6 +264,43 @@ public sealed partial class MainPage : Page
         StatusText.Text = "截屏中…";
         await _services.BeginCaptureAsync(CaptureMode.Translate);
         StatusText.Text = "";
+    }
+
+    private async void OnTtsClick(object sender, RoutedEventArgs e)
+    {
+        var text = InputBox.Text?.Trim() ?? "";
+        if (string.IsNullOrEmpty(text)) return;
+
+        if (_ttsPlaying)
+        {
+            _mediaPlayer.Pause();
+            _mediaPlayer.Source = null;
+            _ttsPlaying = false;
+            TtsButton.Content = "🔊";
+            return;
+        }
+
+        try
+        {
+            var lang = LangValue(FromLangBox);
+            if (lang == "auto") lang = "zh-CHS";
+            var bcp47 = TtsLangMap.GetValueOrDefault(lang, lang);
+            var voice = SpeechSynthesizer.AllVoices
+                .FirstOrDefault(v => v.Language.StartsWith(bcp47.Split('-')[0], StringComparison.OrdinalIgnoreCase))
+                ?? SpeechSynthesizer.DefaultVoice;
+            _synth.Voice = voice;
+            var stream = await _synth.SynthesizeTextToStreamAsync(text);
+            _mediaPlayer.Source = MediaSource.CreateFromStream(stream, stream.ContentType);
+            _mediaPlayer.Play();
+            _ttsPlaying = true;
+            TtsButton.Content = "⏹";
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = "朗读失败: " + ex.Message;
+            _ttsPlaying = false;
+            TtsButton.Content = "🔊";
+        }
     }
 
     private void OnInputChanged(object sender, TextChangedEventArgs e)
@@ -155,7 +330,9 @@ public sealed partial class MainPage : Page
         var seq = ++_translateSeq;
         try
         {
-            var result = await _services.Bing.TranslateAsync(text, LangValue(FromLangBox), LangValue(ToLangBox));
+            PersistSettings();
+            var result = await _services.Translator.TranslateAsync(
+                text, LangValue(FromLangBox), LangValue(ToLangBox), _settings);
             if (seq != _translateSeq) return;
             OutputBox.Text = result.TranslatedText;
             StatusText.Text = "";

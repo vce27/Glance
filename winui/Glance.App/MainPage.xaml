@@ -15,12 +15,12 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Header: languages + actions -->
         <Grid ColumnSpacing="8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
@@ -42,27 +42,32 @@
                 Grid.Column="2"
                 HorizontalAlignment="Stretch"
                 SelectionChanged="OnLangChanged" />
+            <Button
+                x:Name="TtsButton"
+                Grid.Column="3"
+                Click="OnTtsClick"
+                Content="🔊"
+                ToolTipService.ToolTip="朗读原文" />
             <ToggleButton
                 x:Name="PinButton"
-                Grid.Column="3"
+                Grid.Column="4"
                 Click="OnPinClick"
                 Content="📌"
                 ToolTipService.ToolTip="置顶窗口" />
             <Button
                 x:Name="CaptureButton"
-                Grid.Column="4"
+                Grid.Column="5"
                 Click="OnCaptureClick"
                 Content="截屏翻译"
                 Style="{StaticResource AccentButtonStyle}" />
             <ToggleButton
                 x:Name="SettingsButton"
-                Grid.Column="5"
+                Grid.Column="6"
                 Click="OnSettingsToggle"
                 Content="⚙"
                 ToolTipService.ToolTip="设置" />
         </Grid>
 
-        <!-- Text translate -->
         <Grid Grid.Row="1" ColumnSpacing="12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
@@ -83,43 +88,61 @@
                 TextWrapping="Wrap" />
         </Grid>
 
-        <!-- Settings -->
-        <Border
-            x:Name="SettingsPanel"
-            Grid.Row="2"
-            Padding="12"
-            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-            BorderThickness="1"
-            CornerRadius="8"
-            Visibility="Collapsed">
-            <StackPanel Spacing="12">
-                <TextBlock FontWeight="SemiBold" Text="设置" />
-                <TextBlock Opacity="0.7" Text="文本引擎：必应（MVP）" />
-                <ToggleSwitch
-                    x:Name="AutostartSwitch"
-                    Header="开机自启"
-                    OffContent="关"
-                    OnContent="开"
-                    Toggled="OnAutostartToggled" />
-                <TextBox
-                    x:Name="HotkeyBox"
-                    Header="截屏翻译热键"
-                    LostFocus="OnHotkeyCommit" />
-                <TextBox
-                    x:Name="CopyHotkeyBox"
-                    Header="OCR 复制热键"
-                    LostFocus="OnHotkeyCommit" />
-                <TextBox
-                    x:Name="PopupHotkeyBox"
-                    Header="弹出主窗热键（可空）"
-                    LostFocus="OnHotkeyCommit" />
-                <TextBlock
-                    x:Name="StatusText"
-                    Opacity="0.6"
-                    Text=""
-                    TextWrapping="Wrap" />
-            </StackPanel>
-        </Border>
+        <ScrollViewer Grid.Row="2" MaxHeight="320">
+            <Border
+                x:Name="SettingsPanel"
+                Padding="12"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Visibility="Collapsed">
+                <StackPanel Spacing="12">
+                    <TextBlock FontWeight="SemiBold" Text="设置" />
+
+                    <TextBlock Text="文本引擎" />
+                    <GridView
+                        x:Name="EngineList"
+                        IsItemClickEnabled="True"
+                        ItemClick="OnEngineClick"
+                        SelectionMode="None">
+                        <GridView.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <ItemsWrapGrid MaximumRowsOrColumns="4" Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </GridView.ItemsPanel>
+                    </GridView>
+
+                    <TextBlock Text="代理" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <RadioButton x:Name="ProxySystem" Content="系统代理" GroupName="Proxy" Checked="OnProxyChanged" />
+                        <RadioButton x:Name="ProxyCustom" Content="自定义" GroupName="Proxy" Checked="OnProxyChanged" />
+                        <RadioButton x:Name="ProxyNone" Content="不使用" GroupName="Proxy" Checked="OnProxyChanged" />
+                    </StackPanel>
+                    <TextBox
+                        x:Name="CustomProxyBox"
+                        Header="自定义代理 URL"
+                        LostFocus="OnSettingsFieldCommit"
+                        Visibility="Collapsed" />
+
+                    <StackPanel x:Name="LlmPanel" Spacing="8" Visibility="Collapsed">
+                        <TextBox x:Name="LlmBaseUrlBox" Header="LLM Base URL" LostFocus="OnSettingsFieldCommit" />
+                        <PasswordBox x:Name="LlmApiKeyBox" Header="API Key" PasswordChanged="OnLlmApiKeyChanged" />
+                        <TextBox x:Name="LlmModelBox" Header="Model" LostFocus="OnSettingsFieldCommit" />
+                    </StackPanel>
+
+                    <ToggleSwitch
+                        x:Name="AutostartSwitch"
+                        Header="开机自启"
+                        OffContent="关"
+                        OnContent="开"
+                        Toggled="OnAutostartToggled" />
+                    <TextBox x:Name="HotkeyBox" Header="截屏翻译热键" LostFocus="OnHotkeyCommit" />
+                    <TextBox x:Name="CopyHotkeyBox" Header="OCR 复制热键" LostFocus="OnHotkeyCommit" />
+                    <TextBox x:Name="PopupHotkeyBox" Header="弹出主窗热键（可空）" LostFocus="OnHotkeyCommit" />
+                    <TextBlock x:Name="StatusText" Opacity="0.6" Text="" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+        </ScrollViewer>
     </Grid>
 </Page>

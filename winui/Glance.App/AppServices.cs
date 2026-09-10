@@ -19,7 +19,7 @@ public sealed class AppServices
 
     public ConfigStore Store { get; } = new();
     public YoudaoClient Youdao { get; } = new();
-    public BingTranslateClient Bing { get; } = new();
+    public TextTranslator Translator { get; } = new();
     public CaptureService Capture { get; }
 
     public MainWindow? MainWindow { get; set; }

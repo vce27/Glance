@@ -10,6 +10,7 @@ internal sealed class TrayIconHost : IDisposable
     private readonly Action _show;
     private readonly Action _quit;
     private readonly Action _capture;
+    private readonly IntPtr _icon;
     private bool _added;
     private const uint WmTray = 0x8001;
     private const uint WmCommand = 0x0111;
@@ -40,6 +41,7 @@ internal sealed class TrayIconHost : IDisposable
         _hwnd = CreateWindowEx(0, "GlanceTrayHidden", "", 0, 0, 0, 0, 0,
             new IntPtr(-3), IntPtr.Zero, wc.hInstance, IntPtr.Zero);
 
+        _icon = AppIconLoader.LoadTrayIconHandle();
         var data = new NOTIFYICONDATA
         {
             cbSize = (uint)Marshal.SizeOf<NOTIFYICONDATA>(),
@@ -47,7 +49,7 @@ internal sealed class TrayIconHost : IDisposable
             uID = 1,
             uFlags = NifMessage | NifIcon | NifTip,
             uCallbackMessage = WmTray,
-            hIcon = LoadIcon(IntPtr.Zero, new IntPtr(32512)), // IDI_APPLICATION
+            hIcon = _icon,
             szTip = "Glance",
         };
         _added = Shell_NotifyIcon(NimAdd, ref data);
@@ -88,15 +90,19 @@ internal sealed class TrayIconHost : IDisposable
 
     public void Dispose()
     {
-        if (!_added) return;
-        var data = new NOTIFYICONDATA
+        if (_added)
         {
-            cbSize = (uint)Marshal.SizeOf<NOTIFYICONDATA>(),
-            hWnd = _hwnd,
-            uID = 1,
-        };
-        Shell_NotifyIcon(NimDelete, ref data);
-        _added = false;
+            var data = new NOTIFYICONDATA
+            {
+                cbSize = (uint)Marshal.SizeOf<NOTIFYICONDATA>(),
+                hWnd = _hwnd,
+                uID = 1,
+            };
+            Shell_NotifyIcon(NimDelete, ref data);
+            _added = false;
+        }
+        if (_icon != IntPtr.Zero)
+            AppIconLoader.DestroyIcon(_icon);
     }
 
     private delegate IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
@@ -146,9 +152,6 @@ internal sealed class TrayIconHost : IDisposable
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     private static extern bool Shell_NotifyIcon(uint dwMessage, ref NOTIFYICONDATA lpData);
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr LoadIcon(IntPtr hInstance, IntPtr lpIconName);
 
     [DllImport("user32.dll")]
     private static extern IntPtr CreatePopupMenu();

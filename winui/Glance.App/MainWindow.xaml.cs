@@ -15,7 +15,7 @@ public sealed partial class MainWindow : Window
         Title = "Glance";
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
-        try { AppWindow.SetIcon("Assets/AppIcon.ico"); } catch { /* optional */ }
+        try { AppWindow.SetIcon(AppIconLoader.IconPath); } catch { /* optional */ }
 
         SystemBackdrop = new MicaBackdrop { Kind = Microsoft.UI.Composition.SystemBackdrops.MicaKind.Base };
 
