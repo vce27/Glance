@@ -31,10 +31,9 @@ public sealed class CaptureOverlayForm : Form
     private const int MinSelection = 8;
     private const int ToggleW = 36;
     private const int ToggleH = 20;
-    private const int ToggleGap = 4;
-    private const int TogglePadX = 8;
+    private const int ToggleGap = 6;
     private const string CompareLabel = "对比";
-    private readonly Font _toggleLabelFont = new("Segoe UI", 9f, FontStyle.Regular);
+    private readonly Font _toggleLabelFont = new("Microsoft YaHei UI", 9f, FontStyle.Regular);
 
     private readonly Bitmap _screen;
     private readonly Bitmap _dimmed;
@@ -308,51 +307,53 @@ public sealed class CaptureOverlayForm : Form
         if (_compareToggle.IsEmpty) return;
 
         var labelW = MeasureCompareLabelWidth();
-        using (var labelBg = new SolidBrush(Color.FromArgb(170, 0, 0, 0)))
-        using (var shell = RoundedRect(_compareToggle, ToggleH / 2))
-            g.FillPath(labelBg, shell);
-
-        var labelRect = new Rectangle(
-            _compareToggle.X + TogglePadX,
-            _compareToggle.Y,
-            labelW,
-            ToggleH);
-        g.DrawString(CompareLabel, _toggleLabelFont, _whiteBrush, labelRect, _centerFormat);
-
+        var labelRect = new Rectangle(_compareToggle.X, _compareToggle.Y, labelW, ToggleH);
         var track = new Rectangle(
-            _compareToggle.X + TogglePadX + labelW + ToggleGap,
-            _compareToggle.Y + 2,
+            _compareToggle.X + labelW + ToggleGap,
+            _compareToggle.Y,
             ToggleW,
-            ToggleH - 4);
+            ToggleH);
+
+        // Soft dark chip behind the two characters so they stay readable.
+        using (var labelBg = new SolidBrush(Color.FromArgb(170, 0, 0, 0)))
+        using (var labelPath = RoundedRect(Rectangle.Inflate(labelRect, 4, 0), ToggleH / 2))
+            g.FillPath(labelBg, labelPath);
+
+        using var nearCenter = new StringFormat
+        {
+            Alignment = StringAlignment.Center,
+            LineAlignment = StringAlignment.Center,
+            FormatFlags = StringFormatFlags.NoClip | StringFormatFlags.NoWrap,
+        };
+        g.DrawString(CompareLabel, _toggleLabelFont, _whiteBrush, labelRect, nearCenter);
 
         var trackBg = _showCompare ? _toggleOnBg : _toggleOffBg;
         using (var trackPath = RoundedRect(track, track.Height / 2))
             g.FillPath(trackBg, trackPath);
 
         const int pad = 2;
-        var thumbSize = track.Height - pad * 2;
+        var thumbSize = ToggleH - pad * 2;
         var thumbX = _showCompare
             ? track.Right - pad - thumbSize
             : track.X + pad;
-        var thumb = new Rectangle(thumbX, track.Y + pad, thumbSize, thumbSize);
-        g.FillEllipse(_toggleThumb, thumb);
+        g.FillEllipse(_toggleThumb, new Rectangle(thumbX, track.Y + pad, thumbSize, thumbSize));
     }
 
     private int MeasureCompareLabelWidth()
     {
-        var size = TextRenderer.MeasureText(
-            CompareLabel,
-            _toggleLabelFont,
-            new Size(int.MaxValue, ToggleH),
-            TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
-        return Math.Max(28, size.Width);
+        // TextRenderer under-measures CJK with NoPadding; MeasureString is reliable.
+        using var bmp = new Bitmap(1, 1);
+        using var g = Graphics.FromImage(bmp);
+        g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
+        var size = g.MeasureString(CompareLabel, _toggleLabelFont);
+        return Math.Max(36, (int)Math.Ceiling(size.Width) + 2);
     }
 
     private Rectangle LayoutCompareToggle()
     {
         if (_selection.IsEmpty) return Rectangle.Empty;
         var labelW = MeasureCompareLabelWidth();
-        var totalW = TogglePadX + labelW + ToggleGap + ToggleW + TogglePadX;
+        var totalW = labelW + ToggleGap + ToggleW + 8; // +8 for label chip inflate
         var x = Math.Clamp(_selection.Right - totalW, 4, Math.Max(4, Width - totalW - 4));
         var y = _selection.Y - ToggleH - 6;
         if (y < 4) y = Math.Min(_selection.Bottom + 6, Height - ToggleH - 4);
