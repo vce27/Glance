@@ -29,8 +29,12 @@ public sealed class CaptureOverlayForm : Form
     private const int CardPadY = 8;
     private const int CardGap = 6;
     private const int MinSelection = 8;
-    private const int ToggleW = 72;
-    private const int ToggleH = 26;
+    private const int ToggleW = 36;
+    private const int ToggleH = 20;
+    private const int ToggleGap = 4;
+    private const int TogglePadX = 8;
+    private const string CompareLabel = "对比";
+    private readonly Font _toggleLabelFont = new("Segoe UI", 9f, FontStyle.Regular);
 
     private readonly Bitmap _screen;
     private readonly Bitmap _dimmed;
@@ -40,8 +44,9 @@ public sealed class CaptureOverlayForm : Form
     private readonly SolidBrush _targetBrush = new(Color.FromArgb(90, 100, 120));
     private readonly SolidBrush _statusBg = new(Color.FromArgb(200, 32, 32, 32));
     private readonly SolidBrush _handleFill = new(Color.FromArgb(0, 120, 212));
-    private readonly SolidBrush _toggleOnBg = new(Color.FromArgb(0, 120, 212));
-    private readonly SolidBrush _toggleOffBg = new(Color.FromArgb(200, 64, 64, 64));
+    private readonly SolidBrush _toggleOnBg = new(Color.FromArgb(0x52, 0xC4, 0x1A));
+    private readonly SolidBrush _toggleOffBg = new(Color.FromArgb(0xBF, 0xBF, 0xBF));
+    private readonly SolidBrush _toggleThumb = new(Color.White);
     private readonly Pen _accentPen = new(Color.FromArgb(0, 120, 212), 2);
     private readonly Pen _handleOutline = new(Color.White, 1.5f);
     private readonly Pen _cardBorder = new(Color.FromArgb(220, 220, 220));
@@ -69,7 +74,7 @@ public sealed class CaptureOverlayForm : Form
     private Rectangle _compareToggle;
     private bool _showCompare = true;
 
-    /// <summary>When false, only the original selection is shown (no translation card).</summary>
+    /// <summary>When true: original in selection + translation card. When false: translation fills selection.</summary>
     public bool ShowCompareOverlay
     {
         get => _showCompare;
@@ -225,9 +230,17 @@ public sealed class CaptureOverlayForm : Form
 
         var adjusting = _dragMode is DragMode.MoveSelection or DragMode.ResizeSelection;
 
-        // First view: keep the original screenshot pixels (not OCR text).
         g.SetClip(_selection, CombineMode.Replace);
-        g.DrawImage(_screen, 0, 0, Width, Height);
+        if (_showCompare || adjusting)
+        {
+            // Compare on: first layer keeps original screenshot pixels.
+            g.DrawImage(_screen, 0, 0, Width, Height);
+        }
+        else
+        {
+            // Compare off: selection shows translated content directly.
+            DrawTranslationInSelection(g);
+        }
         g.ResetClip();
 
         g.DrawRectangle(_accentPen, _selection);
@@ -248,16 +261,44 @@ public sealed class CaptureOverlayForm : Form
 
         g.FillRectangle(_whiteBrush, _translationCard);
         g.DrawRectangle(_cardBorder, _translationCard);
+        DrawTranslationContent(g, _translationCard);
+    }
+
+    private void DrawTranslationInSelection(Graphics g)
+    {
+        // Cover original completely — selection itself is the translated view.
+        g.FillRectangle(_whiteBrush, _selection);
 
         if (!string.IsNullOrWhiteSpace(_targetText))
         {
-            var textRect = Rectangle.Inflate(_translationCard, -CardPadX, -CardPadY);
-            g.DrawString(_targetText, _uiFontItalic, _targetBrush, textRect, _cardFormat);
+            var textRect = Rectangle.Inflate(_selection, -CardPadX, -CardPadY);
+            using var brush = new SolidBrush(Color.FromArgb(32, 32, 32));
+            g.DrawString(_targetText, _uiFont, brush, textRect, _cardFormat);
+            return;
         }
-        else if (_resultImage is not null)
+
+        if (_resultImage is not null)
         {
-            g.SetClip(_translationCard, CombineMode.Replace);
-            g.DrawImage(_resultImage, _translationCard, new Rectangle(0, 0, _resultImage.Width, _resultImage.Height), GraphicsUnit.Pixel);
+            var old = g.InterpolationMode;
+            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            g.DrawImage(_resultImage, _selection, new Rectangle(0, 0, _resultImage.Width, _resultImage.Height), GraphicsUnit.Pixel);
+            g.InterpolationMode = old;
+        }
+    }
+
+    private void DrawTranslationContent(Graphics g, Rectangle bounds)
+    {
+        if (!string.IsNullOrWhiteSpace(_targetText))
+        {
+            var textRect = Rectangle.Inflate(bounds, -CardPadX, -CardPadY);
+            g.DrawString(_targetText, _uiFontItalic, _targetBrush, textRect, _cardFormat);
+            return;
+        }
+
+        if (_resultImage is not null)
+        {
+            g.SetClip(bounds, CombineMode.Replace);
+            g.DrawImage(_resultImage, bounds, new Rectangle(0, 0, _resultImage.Width, _resultImage.Height), GraphicsUnit.Pixel);
             g.ResetClip();
         }
     }
@@ -265,20 +306,57 @@ public sealed class CaptureOverlayForm : Form
     private void DrawCompareToggle(Graphics g)
     {
         if (_compareToggle.IsEmpty) return;
-        var bg = _showCompare ? _toggleOnBg : _toggleOffBg;
-        using var path = RoundedRect(_compareToggle, 6);
-        g.FillPath(bg, path);
-        var label = _showCompare ? "对比 开" : "对比 关";
-        g.DrawString(label, _uiFont, _whiteBrush, _compareToggle, _centerFormat);
+
+        var labelW = MeasureCompareLabelWidth();
+        using (var labelBg = new SolidBrush(Color.FromArgb(170, 0, 0, 0)))
+        using (var shell = RoundedRect(_compareToggle, ToggleH / 2))
+            g.FillPath(labelBg, shell);
+
+        var labelRect = new Rectangle(
+            _compareToggle.X + TogglePadX,
+            _compareToggle.Y,
+            labelW,
+            ToggleH);
+        g.DrawString(CompareLabel, _toggleLabelFont, _whiteBrush, labelRect, _centerFormat);
+
+        var track = new Rectangle(
+            _compareToggle.X + TogglePadX + labelW + ToggleGap,
+            _compareToggle.Y + 2,
+            ToggleW,
+            ToggleH - 4);
+
+        var trackBg = _showCompare ? _toggleOnBg : _toggleOffBg;
+        using (var trackPath = RoundedRect(track, track.Height / 2))
+            g.FillPath(trackBg, trackPath);
+
+        const int pad = 2;
+        var thumbSize = track.Height - pad * 2;
+        var thumbX = _showCompare
+            ? track.Right - pad - thumbSize
+            : track.X + pad;
+        var thumb = new Rectangle(thumbX, track.Y + pad, thumbSize, thumbSize);
+        g.FillEllipse(_toggleThumb, thumb);
+    }
+
+    private int MeasureCompareLabelWidth()
+    {
+        var size = TextRenderer.MeasureText(
+            CompareLabel,
+            _toggleLabelFont,
+            new Size(int.MaxValue, ToggleH),
+            TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
+        return Math.Max(28, size.Width);
     }
 
     private Rectangle LayoutCompareToggle()
     {
         if (_selection.IsEmpty) return Rectangle.Empty;
-        var x = Math.Clamp(_selection.Right - ToggleW, 4, Math.Max(4, Width - ToggleW - 4));
+        var labelW = MeasureCompareLabelWidth();
+        var totalW = TogglePadX + labelW + ToggleGap + ToggleW + TogglePadX;
+        var x = Math.Clamp(_selection.Right - totalW, 4, Math.Max(4, Width - totalW - 4));
         var y = _selection.Y - ToggleH - 6;
         if (y < 4) y = Math.Min(_selection.Bottom + 6, Height - ToggleH - 4);
-        return new Rectangle(x, y, ToggleW, ToggleH);
+        return new Rectangle(x, y, totalW, ToggleH);
     }
 
     private static GraphicsPath RoundedRect(Rectangle bounds, int radius)
@@ -529,12 +607,14 @@ public sealed class CaptureOverlayForm : Form
             _resultImage?.Dispose();
             _uiFont.Dispose();
             _uiFontItalic.Dispose();
+            _toggleLabelFont.Dispose();
             _whiteBrush.Dispose();
             _targetBrush.Dispose();
             _statusBg.Dispose();
             _handleFill.Dispose();
             _toggleOnBg.Dispose();
             _toggleOffBg.Dispose();
+            _toggleThumb.Dispose();
             _accentPen.Dispose();
             _handleOutline.Dispose();
             _cardBorder.Dispose();

@@ -7,9 +7,13 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version without v prefix (e.g. 0.0.1)'
+        description: 'Version without v prefix (e.g. 0.0.3)'
         required: true
-        default: '0.0.1'
+        default: '0.0.3'
+      notes:
+        description: 'Release notes (optional; defaults to docs/releases/vX.Y.Z.md)'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -27,7 +31,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Resolve version
+      - name: Resolve version & notes
         id: ver
         shell: pwsh
         run: |
@@ -38,6 +42,25 @@ jobs:
           }
           if ($ver -notmatch '^\d+\.\d+\.\d+') { throw "Version must be X.Y.Z, got $ver" }
           "version=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+          $notesPath = "docs/releases/v$ver.md"
+          $inputNotes = @'
+${{ inputs.notes }}
+'@
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch' -and $inputNotes.Trim().Length -gt 0) {
+            $notesPath = Join-Path $env:RUNNER_TEMP 'release-notes.md'
+            Set-Content -Path $notesPath -Value $inputNotes.Trim() -Encoding utf8
+          } elseif (-not (Test-Path $notesPath)) {
+            $notesPath = Join-Path $env:RUNNER_TEMP 'release-notes.md'
+            @"
+## 更新说明
+
+Glance v$ver
+"@ | Set-Content -Path $notesPath -Encoding utf8
+          }
+          Copy-Item $notesPath (Join-Path $env:RUNNER_TEMP 'RELEASE_NOTES.md') -Force
+          Write-Host "Using notes: $notesPath"
+          Get-Content $notesPath
 
       - name: Publish WinUI (win-x64)
         run: |
@@ -50,6 +73,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path artifacts/velopack | Out-Null
+          $notes = Join-Path $env:RUNNER_TEMP 'RELEASE_NOTES.md'
           vpk pack `
             --packId Glance `
             --packVersion ${{ steps.ver.outputs.version }} `
@@ -57,6 +81,7 @@ jobs:
             --mainExe Glance.exe `
             --packTitle Glance `
             --packAuthors vce27 `
+            --releaseNotes $notes `
             --outputDir artifacts/velopack `
             --runtime win-x64
 
@@ -81,11 +106,11 @@ jobs:
         run: |
           $ver = '${{ steps.ver.outputs.version }}'
           New-Item -ItemType Directory -Force -Path artifacts/release | Out-Null
-          # User-facing downloads only (+ minimal Velopack feed for in-app updates)
           Copy-Item 'artifacts/velopack/Glance-win-Setup.exe' 'artifacts/release/' -Force
           Copy-Item 'artifacts/Glance-windows-x64-portable.zip' 'artifacts/release/' -Force
           Copy-Item "artifacts/velopack/Glance-$ver-full.nupkg" 'artifacts/release/' -Force
           Copy-Item 'artifacts/velopack/releases.win.json' 'artifacts/release/' -Force
+          Copy-Item (Join-Path $env:RUNNER_TEMP 'RELEASE_NOTES.md') 'artifacts/release/RELEASE_NOTES.md' -Force
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -103,19 +128,34 @@ jobs:
           path: artifacts
           merge-multiple: true
 
+      - name: Prepare release body
+        shell: bash
+        run: |
+          NOTES="artifacts/RELEASE_NOTES.md"
+          {
+            echo "## 下载"
+            echo ""
+            echo "- **Glance-win-Setup.exe** — 安装版（推荐，支持应用内自动更新）"
+            echo "- **Glance-windows-x64-portable.zip** — 便携版（解压即用，不支持自动更新）"
+            echo ""
+            if [ -f "$NOTES" ]; then
+              cat "$NOTES"
+              echo ""
+            fi
+            echo "> \`*.nupkg\` / \`releases.win.json\` 供安装版自动更新使用，一般不用手动下载。"
+          } > release-body.md
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.build.outputs.version }}
           name: Glance v${{ needs.build.outputs.version }}
-          body: |
-            ## 下载
-
-            - **Glance-win-Setup.exe** — 安装版（推荐，支持应用内自动更新）
-            - **Glance-windows-x64-portable.zip** — 便携版（解压即用，不支持自动更新）
-
-            > `*.nupkg` / `releases.win.json` 供安装版自动更新使用，一般不用手动下载。
-          files: artifacts/*
+          body_path: release-body.md
+          files: |
+            artifacts/Glance-win-Setup.exe
+            artifacts/Glance-windows-x64-portable.zip
+            artifacts/*.nupkg
+            artifacts/releases.win.json
           generate_release_notes: false
           fail_on_unmatched_files: true
           make_latest: true

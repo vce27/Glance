@@ -319,17 +319,35 @@ public sealed partial class MainPage : Page
 
     private void OnAutoUpdateToggled(object sender, RoutedEventArgs e) => PersistSettings();
 
+    private void ApplyUpdateOutcome(UpdateCheckOutcome outcome)
+    {
+        UpdateStatusText.Text = outcome.Kind == UpdateCheckKind.UpdateAvailable
+            ? $"发现新版本 v{outcome.RemoteVersion}（当前 v{outcome.CurrentVersion}）"
+            : outcome.Message + $"（v{outcome.CurrentVersion}）";
+        ApplyUpdateButton.Visibility = outcome.Kind == UpdateCheckKind.UpdateAvailable
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        if (outcome.Kind == UpdateCheckKind.UpdateAvailable && !string.IsNullOrWhiteSpace(outcome.Notes))
+        {
+            UpdateNotesText.Text = "更新说明：\n" + outcome.Notes;
+            UpdateNotesText.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            UpdateNotesText.Text = "";
+            UpdateNotesText.Visibility = Visibility.Collapsed;
+        }
+    }
+
     private async Task AutoCheckUpdatesAsync()
     {
         var outcome = await _services.Updates.CheckAsync();
         DispatcherQueue.TryEnqueue(() =>
         {
-            UpdateStatusText.Text = outcome.Message + $"（v{outcome.CurrentVersion}）";
-            ApplyUpdateButton.Visibility = outcome.Kind == UpdateCheckKind.UpdateAvailable
-                ? Visibility.Visible
-                : Visibility.Collapsed;
+            ApplyUpdateOutcome(outcome);
             if (outcome.Kind == UpdateCheckKind.UpdateAvailable)
-                _services.ReportStatus(outcome.Message);
+                _services.ReportStatus($"发现新版本 v{outcome.RemoteVersion}");
         });
     }
 
@@ -338,15 +356,13 @@ public sealed partial class MainPage : Page
         CheckUpdateButton.IsEnabled = false;
         ApplyUpdateButton.IsEnabled = false;
         UpdateStatusText.Text = "正在检查更新…";
+        UpdateNotesText.Visibility = Visibility.Collapsed;
         try
         {
             var outcome = await _services.Updates.CheckAsync();
-            UpdateStatusText.Text = outcome.Message + $"（v{outcome.CurrentVersion}）";
-            ApplyUpdateButton.Visibility = outcome.Kind == UpdateCheckKind.UpdateAvailable
-                ? Visibility.Visible
-                : Visibility.Collapsed;
+            ApplyUpdateOutcome(outcome);
             StatusText.Text = outcome.Kind is UpdateCheckKind.UpdateAvailable or UpdateCheckKind.Failed
-                ? outcome.Message
+                ? outcome.Message.Split('\n')[0]
                 : "";
 
             // One-click: if update found, download + restart immediately (DeskBox-style).
