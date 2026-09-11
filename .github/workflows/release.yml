@@ -44,7 +44,7 @@ jobs:
             --packDir publish/win-x64 `
             --mainExe Glance.exe `
             --packTitle Glance `
-            --packAuthors Harukaon `
+            --packAuthors vce27 `
             --outputDir artifacts/velopack `
             --runtime win-x64
 
