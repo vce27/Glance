@@ -34,6 +34,8 @@ jobs:
       - name: Resolve version & notes
         id: ver
         shell: pwsh
+        env:
+          INPUT_NOTES: ${{ inputs.notes }}
         run: |
           if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
             $ver = '${{ inputs.version }}'.TrimStart('v')
@@ -44,19 +46,17 @@ jobs:
           "version=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
           $notesPath = "docs/releases/v$ver.md"
-          $inputNotes = @'
-${{ inputs.notes }}
-'@
-          if ('${{ github.event_name }}' -eq 'workflow_dispatch' -and $inputNotes.Trim().Length -gt 0) {
+          $inputNotes = $env:INPUT_NOTES
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch' -and -not [string]::IsNullOrWhiteSpace($inputNotes)) {
             $notesPath = Join-Path $env:RUNNER_TEMP 'release-notes.md'
             Set-Content -Path $notesPath -Value $inputNotes.Trim() -Encoding utf8
           } elseif (-not (Test-Path $notesPath)) {
             $notesPath = Join-Path $env:RUNNER_TEMP 'release-notes.md'
-            @"
-## 更新说明
-
-Glance v$ver
-"@ | Set-Content -Path $notesPath -Encoding utf8
+            @(
+              '## 更新说明'
+              ''
+              "Glance v$ver"
+            ) | Set-Content -Path $notesPath -Encoding utf8
           }
           Copy-Item $notesPath (Join-Path $env:RUNNER_TEMP 'RELEASE_NOTES.md') -Force
           Write-Host "Using notes: $notesPath"
