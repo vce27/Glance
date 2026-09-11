@@ -76,13 +76,22 @@ jobs:
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
           Compress-Archive -Path (Join-Path $out '*') -DestinationPath 'artifacts/Glance-windows-x64-portable.zip' -Force
 
+      - name: Collect release downloads
+        shell: pwsh
+        run: |
+          $ver = '${{ steps.ver.outputs.version }}'
+          New-Item -ItemType Directory -Force -Path artifacts/release | Out-Null
+          # User-facing downloads only (+ minimal Velopack feed for in-app updates)
+          Copy-Item 'artifacts/velopack/Glance-win-Setup.exe' 'artifacts/release/' -Force
+          Copy-Item 'artifacts/Glance-windows-x64-portable.zip' 'artifacts/release/' -Force
+          Copy-Item "artifacts/velopack/Glance-$ver-full.nupkg" 'artifacts/release/' -Force
+          Copy-Item 'artifacts/velopack/releases.win.json' 'artifacts/release/' -Force
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: glance-windows-x64
-          path: |
-            artifacts/velopack/**
-            artifacts/Glance-windows-x64-portable.zip
+          path: artifacts/release/*
 
   release:
     needs: build
@@ -99,6 +108,14 @@ jobs:
         with:
           tag_name: v${{ needs.build.outputs.version }}
           name: Glance v${{ needs.build.outputs.version }}
-          files: artifacts/**/*
-          generate_release_notes: true
-          fail_on_unmatched_files: false
+          body: |
+            ## 下载
+
+            - **Glance-win-Setup.exe** — 安装版（推荐，支持应用内自动更新）
+            - **Glance-windows-x64-portable.zip** — 便携版（解压即用，不支持自动更新）
+
+            > `*.nupkg` / `releases.win.json` 供安装版自动更新使用，一般不用手动下载。
+          files: artifacts/*
+          generate_release_notes: false
+          fail_on_unmatched_files: true
+          make_latest: true

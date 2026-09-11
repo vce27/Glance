@@ -1,0 +1,3 @@
+# Treat archived Tauri tree as vendored so GitHub language stats
+# reflect the current WinUI (C#) app instead of legacy Rust/JS.
+legacy-tauri/** linguist-vendored
