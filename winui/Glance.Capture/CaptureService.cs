@@ -45,107 +45,98 @@ public sealed class CaptureService
                 var snapshot = MonitorCapture.CaptureMonitor(monitor);
 
                 using var overlay = new CaptureOverlayForm(snapshot);
-                // Show modeless so we can update loading/result without closing.
+                using var pulse = new AutoResetEvent(false);
+                void OnChanged(object? _, EventArgs __) => pulse.Set();
+                overlay.Changed += OnChanged;
+                overlay.FormClosed += OnChanged;
+
                 overlay.Show();
                 Application.DoEvents();
 
-                // Wait until selection or cancel.
-                while (!overlay.IsDisposed && overlay.Result is null)
+                TranslationResponse? lastTranslation = null;
+
+                while (!overlay.IsDisposed)
                 {
-                    Application.DoEvents();
-                    Thread.Sleep(10);
-                    if (ct.IsCancellationRequested)
-                    {
-                        overlay.Finish(CaptureOverlayResultKind.Cancelled);
+                    WaitOverlay(overlay, pulse, () => overlay.Result is not null || overlay.IsDisposed, ct);
+
+                    if (overlay.IsDisposed)
                         break;
+
+                    if (overlay.Result is null || overlay.Result.Kind == CaptureOverlayResultKind.Cancelled)
+                    {
+                        tcs.TrySetResult(lastTranslation is null
+                            ? new CaptureSessionResult { Cancelled = true }
+                            : new CaptureSessionResult { Translation = lastTranslation, Cancelled = false });
+                        return;
                     }
-                }
 
-                if (overlay.Result is null || overlay.Result.Kind == CaptureOverlayResultKind.Cancelled)
-                {
-                    tcs.TrySetResult(new CaptureSessionResult { Cancelled = true });
-                    return;
-                }
+                    var sel = overlay.Result.Selection;
+                    var png = MonitorCapture.CropToPng(snapshot.Bitmap, sel);
 
-                var sel = overlay.Result.Selection;
-                var png = MonitorCapture.CropToPng(snapshot.Bitmap, sel);
-                var selection = new SelectionPayload
-                {
-                    X = sel.X,
-                    Y = sel.Y,
-                    Width = sel.Width,
-                    Height = sel.Height,
-                    MonitorId = $"capture:{sel.X}:{sel.Y}:{sel.Width}:{sel.Height}",
-                    MonitorX = monitor.X,
-                    MonitorY = monitor.Y,
-                    MonitorWidth = (uint)monitor.Width,
-                    MonitorHeight = (uint)monitor.Height,
-                    MonitorScaleFactor = monitor.ScaleFactor,
-                };
-
-                overlay.ShowLoading(mode == CaptureMode.CopyText ? "识别中…" : "翻译中…");
-                Application.DoEvents();
-
-                TranslationResponse response;
-                try
-                {
-                    response = _youdao.TranslateImageAsync(
-                        png,
-                        "capture.png",
-                        "image/png",
-                        settings.FromLang,
-                        settings.ToLang,
-                        selection,
-                        settings,
-                        ct: ct).GetAwaiter().GetResult();
-                }
-                catch (Exception ex)
-                {
-                    overlay.ShowLoading("失败: " + ex.Message);
+                    overlay.ShowLoading(mode == CaptureMode.CopyText ? "识别中…" : "翻译中…");
                     Application.DoEvents();
-                    Thread.Sleep(1200);
-                    overlay.Finish(CaptureOverlayResultKind.Cancelled);
-                    tcs.TrySetResult(new CaptureSessionResult { Cancelled = true });
-                    return;
-                }
 
-                try { _store.AppendHistory(response.HistoryItem); } catch { /* ignore */ }
-
-                if (mode == CaptureMode.CopyText)
-                {
-                    var text = string.Join("\n", response.Pairs
-                        .Select(p => p.Source)
-                        .Where(s => !string.IsNullOrWhiteSpace(s)));
-                    if (!string.IsNullOrWhiteSpace(text))
+                    TranslationResponse response;
+                    try
                     {
-                        try { Clipboard.SetText(text); } catch { /* ignore */ }
+                        response = _youdao.TranslateImageAsync(
+                            png,
+                            "capture.png",
+                            "image/png",
+                            settings.FromLang,
+                            settings.ToLang,
+                            settings,
+                            ct: ct).GetAwaiter().GetResult();
                     }
-                    overlay.Finish(CaptureOverlayResultKind.Cancelled);
-                    tcs.TrySetResult(new CaptureSessionResult { CopiedText = text, Cancelled = false });
-                    return;
-                }
-
-                // Show rendered image in-place.
-                var imageBytes = DecodeImagePayload(response.RenderedImageBase64);
-                if (imageBytes is not null)
-                {
-                    overlay.ShowTranslatedResult(imageBytes);
-                    // Wait until user dismisses (Esc / click).
-                    while (!overlay.IsDisposed)
+                    catch (Exception ex)
                     {
+                        overlay.ShowLoading("失败: " + ex.Message);
                         Application.DoEvents();
-                        Thread.Sleep(10);
-                        if (overlay.Result?.Kind == CaptureOverlayResultKind.Cancelled ||
-                            overlay.DialogResult != DialogResult.None)
-                            break;
+                        Thread.Sleep(1200);
+                        overlay.AwaitNextSelection();
+                        continue;
                     }
-                }
-                else
-                {
-                    overlay.Finish(CaptureOverlayResultKind.Cancelled);
+
+                    lastTranslation = response;
+
+                    if (mode == CaptureMode.CopyText)
+                    {
+                        var text = string.Join("\n", response.Pairs
+                            .Select(p => p.Source)
+                            .Where(s => !string.IsNullOrWhiteSpace(s)));
+                        if (!string.IsNullOrWhiteSpace(text))
+                        {
+                            try { Clipboard.SetText(text); } catch { /* ignore */ }
+                        }
+                        overlay.Finish(CaptureOverlayResultKind.Cancelled);
+                        tcs.TrySetResult(new CaptureSessionResult { CopiedText = text, Cancelled = false });
+                        return;
+                    }
+
+                    overlay.ShowTranslatedResult(DecodeImagePayload(response.RenderedImageBase64), response.Pairs);
+
+                    WaitOverlay(overlay, pulse,
+                        () => overlay.IsDisposed || !overlay.IsShowingResult || overlay.Result is not null,
+                        ct);
+
+                    if (overlay.IsDisposed)
+                        break;
+
+                    if (overlay.Result?.Kind == CaptureOverlayResultKind.Cancelled)
+                    {
+                        tcs.TrySetResult(new CaptureSessionResult { Translation = lastTranslation, Cancelled = false });
+                        return;
+                    }
+
+                    if (overlay.Result?.Kind == CaptureOverlayResultKind.Selection)
+                        continue;
+
+                    break;
                 }
 
-                tcs.TrySetResult(new CaptureSessionResult { Translation = response, Cancelled = false });
+                tcs.TrySetResult(lastTranslation is null
+                    ? new CaptureSessionResult { Cancelled = true }
+                    : new CaptureSessionResult { Translation = lastTranslation, Cancelled = false });
             }
             catch (Exception ex)
             {
@@ -162,6 +153,24 @@ public sealed class CaptureService
         thread.Name = "glance-capture";
         thread.Start();
         return tcs.Task;
+    }
+
+    private static void WaitOverlay(
+        CaptureOverlayForm overlay,
+        AutoResetEvent pulse,
+        Func<bool> done,
+        CancellationToken ct)
+    {
+        while (!done())
+        {
+            Application.DoEvents();
+            if (ct.IsCancellationRequested)
+            {
+                overlay.Finish(CaptureOverlayResultKind.Cancelled);
+                return;
+            }
+            pulse.WaitOne(16);
+        }
     }
 
     private static byte[]? DecodeImagePayload(string payload)

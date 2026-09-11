@@ -24,14 +24,16 @@ cd winui
 dotnet publish Glance.App\Glance.App.csproj -c Release -r win-x64 --self-contained true -p:Platform=x64 -p:PublishTrimmed=false -o .\publish\win-x64
 ```
 
-Install locally (replaces prior portable install):
+Install (Velopack, enables auto-update):
 
 ```powershell
-$dst = Join-Path $env:LOCALAPPDATA Glance
-New-Item -ItemType Directory -Force -Path $dst | Out-Null
-Copy-Item .\winui\publish\win-x64\* $dst -Recurse -Force
-Start-Process (Join-Path $dst Glance.exe)
+# after vpk pack … -o .\publish\velopack
+.\winui\publish\velopack\Glance-win-Setup.exe
+# or silent:
+.\winui\publish\velopack\Glance-win-Setup.exe --silent
 ```
+
+App installs to `%LOCALAPPDATA%\Glance\`. Do **not** manually copy `publish\win-x64\*` into that folder — it breaks Velopack.
 
 ## Features (MVP)
 
@@ -40,17 +42,27 @@ Start-Process (Join-Path $dst Glance.exe)
 - Screenshot region translate via **Youdao** image OCR
 - OCR-copy hotkey → clipboard
 - Tray (close hides to tray), single instance, autostart `--minimized`
-- Settings / history at `%APPDATA%\com.harukaon.glance\` (same JSON as Tauri)
+- Settings at `%APPDATA%\com.harukaon.glance\`
+- **Velopack** auto-update from GitHub Releases (Setup installer); `v*` tags publish Setup + portable ZIP
 
 ## Project layout
 
 ```
 winui/
-  Glance.App/       WinUI shell (Mica, tray, hotkeys, main UI)
-  Glance.Core/      settings/history JSON, Youdao, Bing
+  Glance.App/       WinUI shell (Mica, tray, hotkeys, main UI, Velopack)
+  Glance.Core/      settings JSON, Youdao, Bing, proxy, LLM
   Glance.Capture/   BitBlt + selection overlay
 legacy-tauri/       archived Tauri 2 + WebView sources
 ```
+
+## Updates (Velopack)
+
+Install via the `Glance-win-Setup.exe` from GitHub Releases (not the portable ZIP). Then:
+
+- Settings → **自动检查**: startup check, notify when a newer release exists
+- **检查更新**: download + restart into the new version
+
+Update feed defaults to `https://github.com/vce27/Glance` Releases. Override locally with `GLANCE_UPDATE_SOURCE`.
 
 ## Hotkeys
 

@@ -18,7 +18,6 @@ public sealed class MonitorSnapshot
 {
     public required MonitorInfo Monitor { get; init; }
     public required Bitmap Bitmap { get; init; }
-    public required byte[] PngBytes { get; init; }
 }
 
 public static class MonitorCapture
@@ -61,20 +60,16 @@ public static class MonitorCapture
 
     public static MonitorSnapshot CaptureMonitor(MonitorInfo monitor)
     {
-        // Physical-pixel BitBlt of the cursor monitor only (mixed-DPI safe).
         var bmp = new Bitmap(monitor.Width, monitor.Height, PixelFormat.Format32bppArgb);
         using (var g = Graphics.FromImage(bmp))
         {
             g.CopyFromScreen(monitor.X, monitor.Y, 0, 0, new Size(monitor.Width, monitor.Height), CopyPixelOperation.SourceCopy);
         }
 
-        using var ms = new MemoryStream();
-        bmp.Save(ms, ImageFormat.Png);
         return new MonitorSnapshot
         {
             Monitor = monitor,
             Bitmap = bmp,
-            PngBytes = ms.ToArray(),
         };
     }
 

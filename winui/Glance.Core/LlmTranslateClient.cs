@@ -6,15 +6,17 @@ namespace Glance.Core;
 
 public sealed class LlmTranslateClient
 {
-    private readonly HttpClient _http = new();
+    private HttpClient? _http;
+    private string _proxyKey = "\0";
 
     public async Task<TextTranslationResult> TranslateAsync(
         string text,
         string from,
         string to,
-        LlmConfig config,
+        TranslatorSettings settings,
         CancellationToken ct = default)
     {
+        var config = settings.LlmConfig;
         var fromLabel = LangLabel(from);
         var toLabel = LangLabel(to);
         var template = from == "auto"
@@ -42,7 +44,7 @@ public sealed class LlmTranslateClient
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.ApiKey);
         req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
 
-        using var resp = await _http.SendAsync(req, ct);
+        using var resp = await ClientFor(settings).SendAsync(req, ct);
         var respText = await resp.Content.ReadAsStringAsync(ct);
         if (!resp.IsSuccessStatusCode)
             throw new InvalidOperationException($"LLM API error (HTTP {(int)resp.StatusCode}): {respText[..Math.Min(500, respText.Length)]}");
@@ -57,6 +59,18 @@ public sealed class LlmTranslateClient
         if (string.IsNullOrWhiteSpace(translated))
             throw new InvalidOperationException("LLM returned empty result");
         return new TextTranslationResult { TranslatedText = translated, FromLangDetected = from };
+    }
+
+    private HttpClient ClientFor(TranslatorSettings settings)
+    {
+        var key = ProxyResolver.Resolve(settings) ?? "";
+        if (_http is not null && _proxyKey == key)
+            return _http;
+
+        _http?.Dispose();
+        _http = new HttpClient(ProxyResolver.CreateHandler(settings));
+        _proxyKey = key;
+        return _http;
     }
 
     private static string LangLabel(string code) => code switch

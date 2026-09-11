@@ -10,13 +10,12 @@ public sealed class ConfigStore
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true,
         WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.Never,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
     };
 
     private readonly string _baseDir;
     private readonly string _settingsFile;
-    private readonly string _historyFile;
 
     public ConfigStore(string? baseDir = null)
     {
@@ -24,7 +23,6 @@ public sealed class ConfigStore
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "com.harukaon.glance");
         _settingsFile = Path.Combine(_baseDir, "settings.json");
-        _historyFile = Path.Combine(_baseDir, "history.json");
     }
 
     public string BaseDir => _baseDir;
@@ -34,8 +32,6 @@ public sealed class ConfigStore
         Directory.CreateDirectory(_baseDir);
         if (!File.Exists(_settingsFile))
             File.WriteAllText(_settingsFile, JsonSerializer.Serialize(new TranslatorSettings(), JsonOptions));
-        if (!File.Exists(_historyFile))
-            File.WriteAllText(_historyFile, "[]");
     }
 
     public TranslatorSettings LoadSettings()
@@ -49,27 +45,5 @@ public sealed class ConfigStore
     {
         Ensure();
         File.WriteAllText(_settingsFile, JsonSerializer.Serialize(settings, JsonOptions));
-    }
-
-    public List<TranslationHistoryItem> LoadHistory()
-    {
-        Ensure();
-        var json = File.ReadAllText(_historyFile);
-        return JsonSerializer.Deserialize<List<TranslationHistoryItem>>(json, JsonOptions) ?? [];
-    }
-
-    public void SaveHistory(IReadOnlyList<TranslationHistoryItem> history)
-    {
-        Ensure();
-        File.WriteAllText(_historyFile, JsonSerializer.Serialize(history, JsonOptions));
-    }
-
-    public void AppendHistory(TranslationHistoryItem item)
-    {
-        var history = LoadHistory();
-        history.Insert(0, item);
-        if (history.Count > 200)
-            history = history.Take(200).ToList();
-        SaveHistory(history);
     }
 }

@@ -236,6 +236,21 @@ public sealed class BuiltinTranslateClient
 
 public static class ProxyResolver
 {
+    public static HttpClientHandler CreateHandler(TranslatorSettings settings, bool allowAutoRedirect = true)
+    {
+        var handler = new HttpClientHandler { AllowAutoRedirect = allowAutoRedirect };
+        var proxy = Resolve(settings);
+        if (string.IsNullOrEmpty(proxy))
+        {
+            handler.UseProxy = false;
+            return handler;
+        }
+
+        handler.UseProxy = true;
+        handler.Proxy = new WebProxy(proxy);
+        return handler;
+    }
+
     public static string? Resolve(TranslatorSettings settings) => settings.ProxyMode switch
     {
         ProxyMode.None => null,

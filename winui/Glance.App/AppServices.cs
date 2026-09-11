@@ -21,28 +21,71 @@ public sealed class AppServices
     public YoudaoClient Youdao { get; } = new();
     public TextTranslator Translator { get; } = new();
     public CaptureService Capture { get; }
+    public AppUpdateService Updates { get; }
 
     public MainWindow? MainWindow { get; set; }
     public bool MainWindowShown { get; private set; }
+    public event Action<string>? StatusChanged;
+    public event Action<CaptureSessionResult>? CaptureCompleted;
+
+    public void ReportStatus(string message)
+        => MainWindow?.DispatcherQueue.TryEnqueue(() => StatusChanged?.Invoke(message));
 
     private readonly HotkeyWindow _hotkeys = new();
     private TrayIconHost? _tray;
     private Mutex? _singleInstance;
+    private EventWaitHandle? _activateEvent;
+    private volatile bool _activateStop;
+    private const string ActivateEventName = @"Local\Glance.WinUI.Activate";
 
     public AppServices()
     {
         Capture = new CaptureService(Youdao, Store);
+        var localUpdate = Environment.GetEnvironmentVariable("GLANCE_UPDATE_SOURCE");
+        Updates = new AppUpdateService(localUpdate);
         Current = this;
     }
 
     public bool TryTakeSingleInstance()
     {
         _singleInstance = new Mutex(true, @"Local\Glance.WinUI.SingleInstance", out var created);
-        return created;
+        if (!created) return false;
+
+        _activateEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ActivateEventName);
+        var thread = new Thread(ActivateLoop)
+        {
+            IsBackground = true,
+            Name = "glance-activate",
+        };
+        thread.Start();
+        return true;
+    }
+
+    public static void SignalExistingInstance()
+    {
+        try
+        {
+            using var ev = EventWaitHandle.OpenExisting(ActivateEventName);
+            ev.Set();
+        }
+        catch { /* first instance not listening yet */ }
+    }
+
+    private void ActivateLoop()
+    {
+        while (!_activateStop && _activateEvent is not null)
+        {
+            if (_activateEvent.WaitOne(400))
+                MainWindow?.DispatcherQueue.TryEnqueue(ShowMainWindow);
+        }
     }
 
     public void ReleaseSingleInstance()
     {
+        _activateStop = true;
+        try { _activateEvent?.Set(); } catch { /* ignore */ }
+        _activateEvent?.Dispose();
+        _activateEvent = null;
         try { _singleInstance?.ReleaseMutex(); } catch { /* ignore */ }
         _singleInstance?.Dispose();
         _singleInstance = null;
@@ -135,36 +178,61 @@ public sealed class AppServices
             });
         };
 
-        if (HotkeyParser.TryParse(settings.Hotkey, out var t))
-            _hotkeys.Register(HotkeyIdTranslate, t);
-        if (HotkeyParser.TryParse(settings.CopyHotkey, out var c))
-            _hotkeys.Register(HotkeyIdCopy, c);
-        if (HotkeyParser.TryParse(settings.PopupShortcut, out var p))
-            _hotkeys.Register(HotkeyIdPopup, p);
+        var failed = new List<string>();
+        if (!string.IsNullOrWhiteSpace(settings.Hotkey))
+        {
+            if (!HotkeyParser.TryParse(settings.Hotkey, out var t) || !_hotkeys.Register(HotkeyIdTranslate, t))
+                failed.Add("截屏翻译");
+        }
+        if (!string.IsNullOrWhiteSpace(settings.CopyHotkey))
+        {
+            if (!HotkeyParser.TryParse(settings.CopyHotkey, out var c) || !_hotkeys.Register(HotkeyIdCopy, c))
+                failed.Add("OCR 复制");
+        }
+        if (!string.IsNullOrWhiteSpace(settings.PopupShortcut))
+        {
+            if (!HotkeyParser.TryParse(settings.PopupShortcut, out var p) || !_hotkeys.Register(HotkeyIdPopup, p))
+                failed.Add("弹出主窗");
+        }
+        if (failed.Count > 0)
+            ReportStatus("热键注册失败: " + string.Join("、", failed));
     }
 
-    public async Task BeginCaptureAsync(CaptureMode mode)
+    public async Task<CaptureSessionResult> BeginCaptureAsync(CaptureMode mode)
     {
-        // Hide so the picker isn't blocked by the main window (esp. when pinned
-        // always-on-top). Restore afterward if the window was visible — otherwise
-        // pin + capture feels like the window "vanished".
+        if (Capture.IsBusy)
+        {
+            ReportStatus("已有截屏任务进行中");
+            return new CaptureSessionResult { Cancelled = true };
+        }
+
+        ReportStatus(mode == CaptureMode.CopyText ? "识别中…" : "截屏翻译中…");
         var wasShown = MainWindowShown;
         var pinned = false;
         try
         {
-            var settings = Store.LoadSettings();
-            pinned = settings.PinOnTop;
+            pinned = Store.LoadSettings().PinOnTop;
         }
         catch { /* ignore */ }
 
         HideMainWindow();
         try
         {
-            await Capture.RunAsync(mode);
+            var result = await Capture.RunAsync(mode);
+            if (!string.IsNullOrWhiteSpace(result.CopiedText))
+                ReportStatus("已复制识别原文");
+            else if (result.Translation is not null)
+                ReportStatus("截屏翻译完成");
+            else if (result.Cancelled)
+                ReportStatus("");
+            MainWindow?.DispatcherQueue.TryEnqueue(() => CaptureCompleted?.Invoke(result));
+            return result;
         }
         catch (Exception ex)
         {
             Debug.WriteLine("capture failed: " + ex);
+            ReportStatus("截屏失败: " + ex.Message);
+            return new CaptureSessionResult { Cancelled = true };
         }
         finally
         {
@@ -181,6 +249,8 @@ public sealed class AppServices
         _hotkeys.UnregisterAll();
         _tray?.Dispose();
         ReleaseSingleInstance();
+        if (MainWindow is MainWindow win)
+            win.AllowClose();
         Application.Current.Exit();
     }
 

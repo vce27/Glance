@@ -5,7 +5,4 @@
     <Nullable>enable</Nullable>
     <RootNamespace>Glance.Core</RootNamespace>
   </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Win32.Registry" Version="5.0.0" />
-  </ItemGroup>
 </Project>

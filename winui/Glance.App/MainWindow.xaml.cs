@@ -18,7 +18,7 @@ public sealed partial class MainWindow : Window
 
         SystemBackdrop = new MicaBackdrop { Kind = Microsoft.UI.Composition.SystemBackdrops.MicaKind.Base };
 
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(560, 280));
+        AppWindow.Resize(new Windows.Graphics.SizeInt32(560, 304));
         RootFrame.Navigate(typeof(MainPage));
 
         AppWindow.Closing += (_, e) =>
@@ -47,7 +47,7 @@ public sealed partial class MainWindow : Window
     public void SetContentHeight(bool settingsOpen)
     {
         var size = AppWindow.Size;
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(size.Width, settingsOpen ? 640 : 280));
+        AppWindow.Resize(new Windows.Graphics.SizeInt32(size.Width, settingsOpen ? 720 : 304));
     }
 
     public void AllowClose() => _allowClose = true;

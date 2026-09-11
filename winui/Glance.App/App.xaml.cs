@@ -46,6 +46,7 @@ public partial class App : Application
     {
         if (!_services.TryTakeSingleInstance())
         {
+            AppServices.SignalExistingInstance();
             Exit();
             return;
         }

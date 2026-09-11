@@ -8,6 +8,5 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Glance.Core\Glance.Core.csproj" />
-    <PackageReference Include="System.Drawing.Common" Version="8.0.11" />
   </ItemGroup>
 </Project>

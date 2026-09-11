@@ -103,12 +103,10 @@ public sealed partial class MainPage : Page
         SelectLang(FromLangBox, _settings.FromLang);
         SelectLang(ToLangBox, _settings.ToLang);
         PinButton.IsChecked = _settings.PinOnTop;
-        UpdatePinVisual();
         AutostartSwitch.IsOn = _settings.Autostart;
         var dark = string.Equals(_settings.UiTheme, "dark", StringComparison.OrdinalIgnoreCase);
         ThemeSwitch.IsOn = dark;
-        ThemeButton.IsChecked = dark;
-        ThemeButton.Content = dark ? "☀️" : "🌙";
+        AutoUpdateSwitch.IsOn = _settings.AutoCheckUpdates;
         HotkeyBox.Text = _settings.Hotkey;
         CopyHotkeyBox.Text = _settings.CopyHotkey;
         PopupHotkeyBox.Text = _settings.PopupShortcut ?? "";
@@ -117,48 +115,26 @@ public sealed partial class MainPage : Page
         LlmApiKeyBox.Password = _settings.LlmConfig.ApiKey;
         LlmModelBox.Text = _settings.LlmConfig.Model;
         ApplyProxyUi();
-        ApplyToolbarAccent();
+        UpdateThemeButtonGlyph();
         HighlightEngine();
         UpdateEngineDependentUi();
         _services.ApplyPin(_settings.PinOnTop);
+        _services.StatusChanged += msg => DispatcherQueue.TryEnqueue(() => StatusText.Text = msg);
+        _services.CaptureCompleted += result => DispatcherQueue.TryEnqueue(() => ApplyCaptureResult(result));
+        UpdateStatusText.Text = $"当前版本 {_services.Updates.CurrentVersionDisplay}";
+        ApplyUpdateButton.Visibility = Visibility.Collapsed;
         _loadingUi = false;
+
+        if (_settings.AutoCheckUpdates)
+            _ = AutoCheckUpdatesAsync();
     }
 
-    private static readonly Windows.UI.Color AccentColor = Windows.UI.Color.FromArgb(0xFF, 0x00, 0x78, 0xD4);
-
-    private Brush AccentBrush => new SolidColorBrush(AccentColor);
-    private Brush WhiteBrush => new SolidColorBrush(Microsoft.UI.Colors.White);
-
-    /// <summary>
-    /// Selected and unselected toolbar controls both use Glance #0078D4
-    /// (screenshot accent), not OS gray / soft tint.
-    /// </summary>
-    private void ApplyToolbarAccent()
-    {
-        var accent = AccentBrush;
-        var white = WhiteBrush;
-
-        void PaintButton(Button btn)
-        {
-            btn.Background = accent;
-            btn.Foreground = white;
-            btn.BorderBrush = accent;
-        }
-
-        void PaintToggle(ToggleButton btn)
-        {
-            btn.Background = accent;
-            btn.Foreground = white;
-            btn.BorderBrush = accent;
-        }
-
-        PaintButton(SwapLangButton);
-        PaintButton(TtsButton);
-        PaintButton(CaptureButton);
-        PaintToggle(PinButton);
-        PaintToggle(ThemeButton);
-        PaintToggle(SettingsButton);
-    }
+    private static readonly SolidColorBrush AccentBrush = new(Windows.UI.Color.FromArgb(0xFF, 0x00, 0x78, 0xD4));
+    private static readonly SolidColorBrush WhiteBrush = new(Microsoft.UI.Colors.White);
+    private static readonly SolidColorBrush TransparentBrush = new(Microsoft.UI.Colors.Transparent);
+    private static readonly FontFamily FluentIcons = new("Segoe Fluent Icons");
+    private FontIcon? _themeSunIcon;
+    private FontIcon? _themeMoonIcon;
 
     private void ApplyProxyUi()
     {
@@ -179,24 +155,21 @@ public sealed partial class MainPage : Page
 
     private void HighlightEngine()
     {
-        var accent = AccentBrush;
-        var white = WhiteBrush;
         foreach (var item in EngineList.Children)
         {
             if (item is not Button btn || btn.Tag is not TextTranslateEngine eng) continue;
             var selected = eng == _settings.TextTranslateEngine;
-            btn.BorderBrush = accent;
+            btn.BorderBrush = AccentBrush;
             btn.BorderThickness = new Thickness(1);
             if (selected)
             {
-                btn.Background = accent;
-                btn.Foreground = white;
+                btn.Background = AccentBrush;
+                btn.Foreground = WhiteBrush;
             }
             else
             {
-                // Unselected: same accent color as outline + text (not gray).
-                btn.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-                btn.Foreground = accent;
+                btn.Background = TransparentBrush;
+                btn.Foreground = AccentBrush;
             }
         }
     }
@@ -250,6 +223,7 @@ public sealed partial class MainPage : Page
         _settings.LlmConfig.BaseUrl = LlmBaseUrlBox.Text.Trim();
         _settings.LlmConfig.ApiKey = LlmApiKeyBox.Password;
         _settings.LlmConfig.Model = LlmModelBox.Text.Trim();
+        _settings.AutoCheckUpdates = AutoUpdateSwitch.IsOn;
         _services.Store.SaveSettings(_settings);
         _services.ApplyAutostart(_settings.Autostart);
         _services.ReregisterHotkeys(_settings);
@@ -293,22 +267,14 @@ public sealed partial class MainPage : Page
 
     private void OnPinClick(object sender, RoutedEventArgs e)
     {
-        var pinned = PinButton.IsChecked == true;
-        _services.ApplyPin(pinned);
-        UpdatePinVisual();
+        _services.ApplyPin(PinButton.IsChecked == true);
         PersistSettings();
-    }
-
-    private void UpdatePinVisual()
-    {
-        // Selected and unselected both use #0078D4 fill (screenshot accent).
-        ApplyToolbarAccent();
     }
 
     private void OnThemeToggle(object sender, RoutedEventArgs e)
     {
         if (_loadingUi) return;
-        var dark = ThemeButton.IsChecked == true;
+        var dark = !string.Equals(_settings.UiTheme, "dark", StringComparison.OrdinalIgnoreCase);
         ThemeSwitch.IsOn = dark;
         ApplyTheme(dark ? "dark" : "light");
     }
@@ -316,18 +282,25 @@ public sealed partial class MainPage : Page
     private void OnThemeSwitchToggled(object sender, RoutedEventArgs e)
     {
         if (_loadingUi) return;
-        var dark = ThemeSwitch.IsOn;
-        ThemeButton.IsChecked = dark;
-        ApplyTheme(dark ? "dark" : "light");
+        ApplyTheme(ThemeSwitch.IsOn ? "dark" : "light");
     }
 
     private void ApplyTheme(string theme)
     {
         _settings.UiTheme = theme;
-        ThemeButton.Content = theme == "dark" ? "☀️" : "🌙";
+        UpdateThemeButtonGlyph();
         if (AppServices.Current.MainWindow is MainWindow win)
             win.ApplyUiTheme(theme);
         PersistSettings();
+    }
+
+    private void UpdateThemeButtonGlyph()
+    {
+        var dark = string.Equals(_settings.UiTheme, "dark", StringComparison.OrdinalIgnoreCase);
+        _themeSunIcon ??= new FontIcon { Glyph = "\uE706", FontSize = 16, FontFamily = FluentIcons }; // WeatherSunny
+        _themeMoonIcon ??= new FontIcon { Glyph = "\uE708", FontSize = 16, FontFamily = FluentIcons }; // WeatherMoon
+        ThemeButton.Content = dark ? _themeSunIcon : _themeMoonIcon;
+        ToolTipService.SetToolTip(ThemeButton, dark ? "切换到浅色主题" : "切换到深色主题");
     }
 
     private void OnSettingsToggle(object sender, RoutedEventArgs e)
@@ -341,11 +314,92 @@ public sealed partial class MainPage : Page
     private void OnAutostartToggled(object sender, RoutedEventArgs e) => PersistSettings();
     private void OnHotkeyCommit(object sender, RoutedEventArgs e) => PersistSettings();
 
+    private void OnAutoUpdateToggled(object sender, RoutedEventArgs e) => PersistSettings();
+
+    private async Task AutoCheckUpdatesAsync()
+    {
+        var outcome = await _services.Updates.CheckAsync();
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            UpdateStatusText.Text = outcome.Message + $"（v{outcome.CurrentVersion}）";
+            ApplyUpdateButton.Visibility = outcome.Kind == UpdateCheckKind.UpdateAvailable
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            if (outcome.Kind == UpdateCheckKind.UpdateAvailable)
+                _services.ReportStatus(outcome.Message);
+        });
+    }
+
+    private async void OnCheckUpdateClick(object sender, RoutedEventArgs e)
+    {
+        CheckUpdateButton.IsEnabled = false;
+        ApplyUpdateButton.IsEnabled = false;
+        UpdateStatusText.Text = "正在检查更新…";
+        try
+        {
+            var outcome = await _services.Updates.CheckAsync();
+            UpdateStatusText.Text = outcome.Message + $"（v{outcome.CurrentVersion}）";
+            ApplyUpdateButton.Visibility = outcome.Kind == UpdateCheckKind.UpdateAvailable
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            StatusText.Text = outcome.Kind is UpdateCheckKind.UpdateAvailable or UpdateCheckKind.Failed
+                ? outcome.Message
+                : "";
+
+            // One-click: if update found, download + restart immediately (DeskBox-style).
+            if (outcome.Kind == UpdateCheckKind.UpdateAvailable)
+                await DownloadAndRestartAsync();
+        }
+        finally
+        {
+            CheckUpdateButton.IsEnabled = true;
+            ApplyUpdateButton.IsEnabled = true;
+        }
+    }
+
+    private async void OnApplyUpdateClick(object sender, RoutedEventArgs e)
+        => await DownloadAndRestartAsync();
+
+    private async Task DownloadAndRestartAsync()
+    {
+        CheckUpdateButton.IsEnabled = false;
+        ApplyUpdateButton.IsEnabled = false;
+        UpdateStatusText.Text = "正在下载更新…";
+        StatusText.Text = "正在下载更新…";
+        var progress = new Progress<int>(p =>
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                UpdateStatusText.Text = $"正在下载更新… {p}%";
+                StatusText.Text = $"正在下载更新… {p}%";
+            });
+        });
+
+        var result = await _services.Updates.DownloadAndApplyAsync(progress);
+        // ApplyUpdatesAndRestart exits the process on success; only failures reach here.
+        UpdateStatusText.Text = result.Message;
+        StatusText.Text = result.Message;
+        CheckUpdateButton.IsEnabled = true;
+        ApplyUpdateButton.IsEnabled = true;
+    }
+
     private async void OnCaptureClick(object sender, RoutedEventArgs e)
     {
-        StatusText.Text = "截屏中…";
         await _services.BeginCaptureAsync(CaptureMode.Translate);
-        StatusText.Text = "";
+    }
+
+    private void ApplyCaptureResult(CaptureSessionResult result)
+    {
+        if (!string.IsNullOrWhiteSpace(result.CopiedText))
+        {
+            InputBox.Text = result.CopiedText;
+            return;
+        }
+
+        var pairs = result.Translation?.Pairs;
+        if (pairs is null || pairs.Count == 0) return;
+        InputBox.Text = string.Join("\n", pairs.Select(p => p.Source).Where(s => !string.IsNullOrWhiteSpace(s)));
+        OutputBox.Text = string.Join("\n", pairs.Select(p => p.Target).Where(s => !string.IsNullOrWhiteSpace(s)));
     }
 
     private async void OnTtsClick(object sender, RoutedEventArgs e)

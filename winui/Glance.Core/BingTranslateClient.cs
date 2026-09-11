@@ -9,35 +9,50 @@ public sealed class BingTranslateClient
     private const string CnHost = "https://cn.bing.com";
     private const string WwwHost = "https://www.bing.com";
 
-    private readonly HttpClient _http;
+    private HttpClient? _http;
+    private string _proxyKey = "\0";
     private BingToken? _token;
     private readonly SemaphoreSlim _lock = new(1, 1);
 
-    public BingTranslateClient(HttpClient? http = null)
+    public BingTranslateClient()
     {
-        _http = http ?? new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
-        _http.DefaultRequestHeaders.UserAgent.ParseAdd(
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
     }
 
-    public async Task<TextTranslationResult> TranslateAsync(string text, string from, string to, CancellationToken ct = default)
+    private HttpClient ClientFor(TranslatorSettings settings)
     {
-        var token = await GetOrRefreshTokenAsync(ct);
+        var key = ProxyResolver.Resolve(settings) ?? "";
+        if (_http is not null && _proxyKey == key)
+            return _http;
+
+        _http?.Dispose();
+        _http = new HttpClient(ProxyResolver.CreateHandler(settings, allowAutoRedirect: false));
+        _http.DefaultRequestHeaders.UserAgent.ParseAdd(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+        _proxyKey = key;
+        _token = null;
+        return _http;
+    }
+
+    public async Task<TextTranslationResult> TranslateAsync(
+        string text, string from, string to, TranslatorSettings settings, CancellationToken ct = default)
+    {
+        var http = ClientFor(settings);
+        var token = await GetOrRefreshTokenAsync(http, ct);
         try
         {
-            return await TranslateWithTokenAsync(text, from, to, token, ct);
+            return await TranslateWithTokenAsync(http, text, from, to, token, ct);
         }
         catch
         {
             await _lock.WaitAsync(ct);
             try { _token = null; } finally { _lock.Release(); }
-            token = await GetOrRefreshTokenAsync(ct, WwwHost);
-            return await TranslateWithTokenAsync(text, from, to, token, ct);
+            token = await GetOrRefreshTokenAsync(http, ct, WwwHost);
+            return await TranslateWithTokenAsync(http, text, from, to, token, ct);
         }
     }
 
     private async Task<TextTranslationResult> TranslateWithTokenAsync(
-        string text, string from, string to, BingToken token, CancellationToken ct)
+        HttpClient http, string text, string from, string to, BingToken token, CancellationToken ct)
     {
         var fromBing = MapLang(from);
         var toBing = MapLang(to);
@@ -56,7 +71,7 @@ public sealed class BingTranslateClient
             ["key"] = token.Key,
         });
 
-        using var resp = await _http.SendAsync(req, ct);
+        using var resp = await http.SendAsync(req, ct);
         if ((int)resp.StatusCode is 301 or 302 or 429)
             throw new InvalidOperationException($"Bing translate status {(int)resp.StatusCode}");
 
@@ -93,7 +108,7 @@ public sealed class BingTranslateClient
         };
     }
 
-    private async Task<BingToken> GetOrRefreshTokenAsync(CancellationToken ct, string? preferHost = null)
+    private async Task<BingToken> GetOrRefreshTokenAsync(HttpClient http, CancellationToken ct, string? preferHost = null)
     {
         await _lock.WaitAsync(ct);
         try
@@ -103,17 +118,17 @@ public sealed class BingTranslateClient
 
             if (preferHost is not null)
             {
-                _token = await FetchTokenAsync(preferHost, ct);
+                _token = await FetchTokenAsync(http, preferHost, ct);
                 return _token;
             }
 
             try
             {
-                _token = await FetchTokenAsync(CnHost, ct);
+                _token = await FetchTokenAsync(http, CnHost, ct);
             }
             catch
             {
-                _token = await FetchTokenAsync(WwwHost, ct);
+                _token = await FetchTokenAsync(http, WwwHost, ct);
             }
             return _token;
         }
@@ -123,9 +138,9 @@ public sealed class BingTranslateClient
         }
     }
 
-    private async Task<BingToken> FetchTokenAsync(string host, CancellationToken ct)
+    private async Task<BingToken> FetchTokenAsync(HttpClient http, string host, CancellationToken ct)
     {
-        using var resp = await _http.GetAsync($"{host}/translator", ct);
+        using var resp = await http.GetAsync($"{host}/translator", ct);
         if ((int)resp.StatusCode is 301 or 302)
             throw new InvalidOperationException($"Bing {host} redirected");
         var html = await resp.Content.ReadAsStringAsync(ct);
