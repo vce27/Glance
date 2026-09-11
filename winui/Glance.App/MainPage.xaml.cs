@@ -104,6 +104,7 @@ public sealed partial class MainPage : Page
         SelectLang(ToLangBox, _settings.ToLang);
         PinButton.IsChecked = _settings.PinOnTop;
         AutostartSwitch.IsOn = _settings.Autostart;
+        CompareOverlaySwitch.IsOn = _settings.ShowCompareOverlay;
         var dark = string.Equals(_settings.UiTheme, "dark", StringComparison.OrdinalIgnoreCase);
         ThemeSwitch.IsOn = dark;
         AutoUpdateSwitch.IsOn = _settings.AutoCheckUpdates;
@@ -214,6 +215,7 @@ public sealed partial class MainPage : Page
         _settings.ToLang = LangValue(ToLangBox);
         _settings.PinOnTop = PinButton.IsChecked == true;
         _settings.Autostart = AutostartSwitch.IsOn;
+        _settings.ShowCompareOverlay = CompareOverlaySwitch.IsOn;
         _settings.UiTheme = ThemeSwitch.IsOn ? "dark" : "light";
         _settings.Hotkey = HotkeyBox.Text.Trim();
         _settings.CopyHotkey = CopyHotkeyBox.Text.Trim();
@@ -312,6 +314,7 @@ public sealed partial class MainPage : Page
     }
 
     private void OnAutostartToggled(object sender, RoutedEventArgs e) => PersistSettings();
+    private void OnCompareOverlayToggled(object sender, RoutedEventArgs e) => PersistSettings();
     private void OnHotkeyCommit(object sender, RoutedEventArgs e) => PersistSettings();
 
     private void OnAutoUpdateToggled(object sender, RoutedEventArgs e) => PersistSettings();

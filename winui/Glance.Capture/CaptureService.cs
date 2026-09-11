@@ -45,6 +45,17 @@ public sealed class CaptureService
                 var snapshot = MonitorCapture.CaptureMonitor(monitor);
 
                 using var overlay = new CaptureOverlayForm(snapshot);
+                overlay.ShowCompareOverlay = settings.ShowCompareOverlay;
+                overlay.CompareOverlayChanged += show =>
+                {
+                    try
+                    {
+                        var s = _store.LoadSettings();
+                        s.ShowCompareOverlay = show;
+                        _store.SaveSettings(s);
+                    }
+                    catch { /* ignore */ }
+                };
                 using var pulse = new AutoResetEvent(false);
                 void OnChanged(object? _, EventArgs __) => pulse.Set();
                 overlay.Changed += OnChanged;

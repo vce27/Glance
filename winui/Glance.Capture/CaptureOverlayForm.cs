@@ -29,6 +29,8 @@ public sealed class CaptureOverlayForm : Form
     private const int CardPadY = 8;
     private const int CardGap = 6;
     private const int MinSelection = 8;
+    private const int ToggleW = 72;
+    private const int ToggleH = 26;
 
     private readonly Bitmap _screen;
     private readonly Bitmap _dimmed;
@@ -38,6 +40,8 @@ public sealed class CaptureOverlayForm : Form
     private readonly SolidBrush _targetBrush = new(Color.FromArgb(90, 100, 120));
     private readonly SolidBrush _statusBg = new(Color.FromArgb(200, 32, 32, 32));
     private readonly SolidBrush _handleFill = new(Color.FromArgb(0, 120, 212));
+    private readonly SolidBrush _toggleOnBg = new(Color.FromArgb(0, 120, 212));
+    private readonly SolidBrush _toggleOffBg = new(Color.FromArgb(200, 64, 64, 64));
     private readonly Pen _accentPen = new(Color.FromArgb(0, 120, 212), 2);
     private readonly Pen _handleOutline = new(Color.White, 1.5f);
     private readonly Pen _cardBorder = new(Color.FromArgb(220, 220, 220));
@@ -62,6 +66,22 @@ public sealed class CaptureOverlayForm : Form
     private string? _statusText;
     private Rectangle _translationCard;
     private int _translationCardHeight = 28;
+    private Rectangle _compareToggle;
+    private bool _showCompare = true;
+
+    /// <summary>When false, only the original selection is shown (no translation card).</summary>
+    public bool ShowCompareOverlay
+    {
+        get => _showCompare;
+        set
+        {
+            if (_showCompare == value) return;
+            _showCompare = value;
+            if (_showingResult) Invalidate();
+        }
+    }
+
+    public event Action<bool>? CompareOverlayChanged;
 
     private enum DragMode { None, MoveSelection, ResizeSelection, Reselect }
     private DragMode _dragMode;
@@ -218,7 +238,10 @@ public sealed class CaptureOverlayForm : Form
             g.DrawEllipse(_handleOutline, r);
         }
 
-        if (adjusting) return;
+        _compareToggle = LayoutCompareToggle();
+        DrawCompareToggle(g);
+
+        if (adjusting || !_showCompare) return;
 
         _translationCard = LayoutTranslationCard();
         if (_translationCard.IsEmpty) return;
@@ -237,6 +260,37 @@ public sealed class CaptureOverlayForm : Form
             g.DrawImage(_resultImage, _translationCard, new Rectangle(0, 0, _resultImage.Width, _resultImage.Height), GraphicsUnit.Pixel);
             g.ResetClip();
         }
+    }
+
+    private void DrawCompareToggle(Graphics g)
+    {
+        if (_compareToggle.IsEmpty) return;
+        var bg = _showCompare ? _toggleOnBg : _toggleOffBg;
+        using var path = RoundedRect(_compareToggle, 6);
+        g.FillPath(bg, path);
+        var label = _showCompare ? "对比 开" : "对比 关";
+        g.DrawString(label, _uiFont, _whiteBrush, _compareToggle, _centerFormat);
+    }
+
+    private Rectangle LayoutCompareToggle()
+    {
+        if (_selection.IsEmpty) return Rectangle.Empty;
+        var x = Math.Clamp(_selection.Right - ToggleW, 4, Math.Max(4, Width - ToggleW - 4));
+        var y = _selection.Y - ToggleH - 6;
+        if (y < 4) y = Math.Min(_selection.Bottom + 6, Height - ToggleH - 4);
+        return new Rectangle(x, y, ToggleW, ToggleH);
+    }
+
+    private static GraphicsPath RoundedRect(Rectangle bounds, int radius)
+    {
+        var path = new GraphicsPath();
+        var d = radius * 2;
+        path.AddArc(bounds.X, bounds.Y, d, d, 180, 90);
+        path.AddArc(bounds.Right - d, bounds.Y, d, d, 270, 90);
+        path.AddArc(bounds.Right - d, bounds.Bottom - d, d, d, 0, 90);
+        path.AddArc(bounds.X, bounds.Bottom - d, d, d, 90, 90);
+        path.CloseFigure();
+        return path;
     }
 
     private int MeasureTranslationHeight()
@@ -280,6 +334,15 @@ public sealed class CaptureOverlayForm : Form
 
         if (_showingResult)
         {
+            _compareToggle = LayoutCompareToggle();
+            if (!_compareToggle.IsEmpty && _compareToggle.Contains(e.Location))
+            {
+                _showCompare = !_showCompare;
+                CompareOverlayChanged?.Invoke(_showCompare);
+                Invalidate();
+                return;
+            }
+
             var handle = HitTestHandle(e.Location, _selection);
             if (handle >= 0)
             {
@@ -348,6 +411,13 @@ public sealed class CaptureOverlayForm : Form
 
         if (_showingResult && _dragMode == DragMode.None)
         {
+            _compareToggle = LayoutCompareToggle();
+            if (!_compareToggle.IsEmpty && _compareToggle.Contains(e.Location))
+            {
+                Cursor = Cursors.Hand;
+                return;
+            }
+
             var handle = HitTestHandle(e.Location, _selection);
             Cursor = handle >= 0
                 ? CursorForHandle(handle)
@@ -376,6 +446,7 @@ public sealed class CaptureOverlayForm : Form
             dirty = Rectangle.Union(dirty, new Rectangle(after.X, after.Bottom, Math.Max(1, after.Width), band));
             dirty = Rectangle.Union(dirty, new Rectangle(before.X, before.Y - band, Math.Max(1, before.Width), band));
             dirty = Rectangle.Union(dirty, new Rectangle(after.X, after.Y - band, Math.Max(1, after.Width), band));
+            dirty = Rectangle.Union(dirty, InflateRect(LayoutCompareToggle(), 4));
         }
         dirty.Intersect(ClientRectangle);
         if (!dirty.IsEmpty) Invalidate(dirty);
@@ -462,6 +533,8 @@ public sealed class CaptureOverlayForm : Form
             _targetBrush.Dispose();
             _statusBg.Dispose();
             _handleFill.Dispose();
+            _toggleOnBg.Dispose();
+            _toggleOffBg.Dispose();
             _accentPen.Dispose();
             _handleOutline.Dispose();
             _cardBorder.Dispose();

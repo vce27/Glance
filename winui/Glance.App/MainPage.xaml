@@ -166,6 +166,12 @@
                         OffContent="关"
                         OnContent="开"
                         Toggled="OnAutostartToggled" />
+                    <ToggleSwitch
+                        x:Name="CompareOverlaySwitch"
+                        Header="截屏对比图"
+                        OffContent="关"
+                        OnContent="开"
+                        Toggled="OnCompareOverlayToggled" />
 
                     <TextBlock FontWeight="SemiBold" Text="应用更新" />
                     <ToggleSwitch

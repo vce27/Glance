@@ -47,6 +47,8 @@ public sealed class TranslatorSettings
     public string UiTheme { get; set; } = "light";
     /// <summary>Check GitHub for Velopack updates once after startup.</summary>
     public bool AutoCheckUpdates { get; set; } = true;
+    /// <summary>Show translation compare card under the screenshot selection.</summary>
+    public bool ShowCompareOverlay { get; set; } = true;
 }
 
 public sealed class TranslationPair
