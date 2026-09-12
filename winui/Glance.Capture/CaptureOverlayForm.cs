@@ -67,6 +67,7 @@ public sealed class CaptureOverlayForm : Form
     private Bitmap? _resultImage;
     private bool _showingResult;
     private string _targetText = "";
+    private IReadOnlyList<TranslationPair> _pairs = [];
     private string? _statusText;
     private Rectangle _translationCard;
     private int _translationCardHeight = 28;
@@ -137,6 +138,7 @@ public sealed class CaptureOverlayForm : Form
         _resultImage?.Dispose();
         _resultImage = null;
         _targetText = "";
+        _pairs = [];
         Result = null;
         Cursor = Cursors.Cross;
         Invalidate();
@@ -156,6 +158,7 @@ public sealed class CaptureOverlayForm : Form
     {
         var list = pairs?.Where(p => !string.IsNullOrWhiteSpace(p.Source) || !string.IsNullOrWhiteSpace(p.Target)).ToList()
                    ?? [];
+        _pairs = list;
         _targetText = string.Join("\n", list.Select(p => p.Target).Where(s => !string.IsNullOrWhiteSpace(s)));
 
         if (jpegBytes is { Length: > 0 })
@@ -250,56 +253,142 @@ public sealed class CaptureOverlayForm : Form
             g.DrawEllipse(_handleOutline, r);
         }
 
+        if (!adjusting && _showCompare)
+        {
+            _translationCard = LayoutTranslationCard();
+            if (!_translationCard.IsEmpty)
+            {
+                g.FillRectangle(_whiteBrush, _translationCard);
+                g.DrawRectangle(_cardBorder, _translationCard);
+                DrawTranslationContent(g, _translationCard);
+            }
+        }
+        else
+        {
+            _translationCard = Rectangle.Empty;
+        }
+
+        // Draw last so a large translation card never covers the control.
         _compareToggle = LayoutCompareToggle();
         DrawCompareToggle(g);
-
-        if (adjusting || !_showCompare) return;
-
-        _translationCard = LayoutTranslationCard();
-        if (_translationCard.IsEmpty) return;
-
-        g.FillRectangle(_whiteBrush, _translationCard);
-        g.DrawRectangle(_cardBorder, _translationCard);
-        DrawTranslationContent(g, _translationCard);
     }
 
     private void DrawTranslationInSelection(Graphics g)
     {
-        // Cover original completely — selection itself is the translated view.
+        // Cover original — selection itself is the translated view.
         g.FillRectangle(_whiteBrush, _selection);
+        DrawLaidOutTranslation(g, _selection, fillBackground: false);
+    }
 
-        if (!string.IsNullOrWhiteSpace(_targetText))
-        {
-            var textRect = Rectangle.Inflate(_selection, -CardPadX, -CardPadY);
-            using var brush = new SolidBrush(Color.FromArgb(32, 32, 32));
-            g.DrawString(_targetText, _uiFont, brush, textRect, _cardFormat);
-            return;
-        }
+    private void DrawTranslationContent(Graphics g, Rectangle bounds)
+    {
+        DrawLaidOutTranslation(g, bounds, fillBackground: false);
+    }
+
+    /// <summary>
+    /// Prefer Youdao's layout-rendered image; else draw each OCR region in place; else plain text.
+    /// </summary>
+    private void DrawLaidOutTranslation(Graphics g, Rectangle dest, bool fillBackground)
+    {
+        if (fillBackground)
+            g.FillRectangle(_whiteBrush, dest);
 
         if (_resultImage is not null)
         {
             var old = g.InterpolationMode;
             g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-            g.DrawImage(_resultImage, _selection, new Rectangle(0, 0, _resultImage.Width, _resultImage.Height), GraphicsUnit.Pixel);
+            g.SetClip(dest, CombineMode.Replace);
+            g.DrawImage(_resultImage, dest, new Rectangle(0, 0, _resultImage.Width, _resultImage.Height), GraphicsUnit.Pixel);
+            g.ResetClip();
             g.InterpolationMode = old;
-        }
-    }
-
-    private void DrawTranslationContent(Graphics g, Rectangle bounds)
-    {
-        if (!string.IsNullOrWhiteSpace(_targetText))
-        {
-            var textRect = Rectangle.Inflate(bounds, -CardPadX, -CardPadY);
-            g.DrawString(_targetText, _uiFontItalic, _targetBrush, textRect, _cardFormat);
             return;
         }
 
-        if (_resultImage is not null)
+        if (TryDrawRegionTexts(g, dest))
+            return;
+
+        if (!string.IsNullOrWhiteSpace(_targetText))
         {
-            g.SetClip(bounds, CombineMode.Replace);
-            g.DrawImage(_resultImage, bounds, new Rectangle(0, 0, _resultImage.Width, _resultImage.Height), GraphicsUnit.Pixel);
-            g.ResetClip();
+            var textRect = Rectangle.Inflate(dest, -CardPadX, -CardPadY);
+            using var brush = new SolidBrush(Color.FromArgb(32, 32, 32));
+            g.DrawString(_targetText, _uiFont, brush, textRect, _cardFormat);
         }
+    }
+
+    private bool TryDrawRegionTexts(Graphics g, Rectangle dest)
+    {
+        var regions = _pairs.Where(p => p.Bounds is not null && !string.IsNullOrWhiteSpace(p.Target)).ToList();
+        if (regions.Count == 0) return false;
+
+        // Crop coords → dest. Prefer rendered-image size as reference when present.
+        var srcW = _resultImage?.Width > 0 ? _resultImage.Width : Math.Max(1, _selection.Width);
+        var srcH = _resultImage?.Height > 0 ? _resultImage.Height : Math.Max(1, _selection.Height);
+        // When only regions exist, bounds are relative to the uploaded crop (== selection pixels).
+        if (_resultImage is null)
+        {
+            srcW = Math.Max(1, _selection.Width);
+            srcH = Math.Max(1, _selection.Height);
+        }
+
+        using var textBrush = new SolidBrush(Color.FromArgb(32, 32, 32));
+        using var format = new StringFormat
+        {
+            Alignment = StringAlignment.Near,
+            LineAlignment = StringAlignment.Near,
+            Trimming = StringTrimming.EllipsisWord,
+            FormatFlags = StringFormatFlags.LineLimit,
+        };
+
+        foreach (var pair in regions)
+        {
+            var b = pair.Bounds!;
+            var rx = dest.X + (int)Math.Round(b.X * dest.Width / srcW);
+            var ry = dest.Y + (int)Math.Round(b.Y * dest.Height / srcH);
+            var rw = Math.Max(8, (int)Math.Round(b.Width * dest.Width / srcW));
+            var rh = Math.Max(8, (int)Math.Round(b.Height * dest.Height / srcH));
+            var box = Rectangle.Intersect(dest, new Rectangle(rx, ry, rw, rh));
+            if (box.Width <= 0 || box.Height <= 0) continue;
+
+            g.FillRectangle(_whiteBrush, box);
+            var pad = Math.Max(1, Math.Min(4, Math.Min(box.Width, box.Height) / 8));
+            var textRect = Rectangle.Inflate(box, -pad, -pad);
+            if (textRect.Width <= 0 || textRect.Height <= 0) textRect = box;
+
+            // Fit font roughly to region height so flowchart boxes stay readable.
+            var fontSize = Math.Clamp(textRect.Height * 0.55f, 7f, 14f);
+            using var font = new Font(_uiFont.FontFamily, fontSize, FontStyle.Regular);
+            g.DrawString(pair.Target, font, textBrush, textRect, format);
+        }
+
+        return true;
+    }
+
+    private int MeasureTranslationHeight()
+    {
+        // Keep card aspect close to the layout image / selection so positions stay recognizable.
+        if (_resultImage is not null && !_selection.IsEmpty && _resultImage.Width > 0)
+        {
+            var h = (int)Math.Round(_selection.Width * (double)_resultImage.Height / _resultImage.Width);
+            return Math.Clamp(h, 28, Math.Max(28, Height - 8));
+        }
+
+        if (_pairs.Any(p => p.Bounds is not null) && !_selection.IsEmpty)
+            return Math.Max(28, _selection.Height);
+
+        if (!string.IsNullOrWhiteSpace(_targetText))
+        {
+            var width = Math.Max(40, (_selection.IsEmpty ? 200 : _selection.Width) - CardPadX * 2);
+            var size = TextRenderer.MeasureText(
+                _targetText,
+                _uiFontItalic,
+                new Size(width, int.MaxValue),
+                TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl);
+            return Math.Max(28, size.Height + CardPadY * 2);
+        }
+
+        if (_resultImage is not null && !_selection.IsEmpty)
+            return Math.Max(28, _selection.Height);
+        return 28;
     }
 
     private void DrawCompareToggle(Graphics g)
@@ -354,9 +443,19 @@ public sealed class CaptureOverlayForm : Form
         if (_selection.IsEmpty) return Rectangle.Empty;
         var labelW = MeasureCompareLabelWidth();
         var totalW = labelW + ToggleGap + ToggleW + 8; // +8 for label chip inflate
-        var x = Math.Clamp(_selection.Right - totalW, 4, Math.Max(4, Width - totalW - 4));
-        var y = _selection.Y - ToggleH - 6;
-        if (y < 4) y = Math.Min(_selection.Bottom + 6, Height - ToggleH - 4);
+        const int gap = 8;
+
+        // Prefer the right of the selection so large regions still leave the control visible.
+        var x = _selection.Right + gap;
+        if (x + totalW > Width - 4)
+        {
+            // No room outside — pin inside the selection's right edge.
+            x = Math.Max(4, _selection.Right - totalW - gap);
+            if (x + totalW > Width - 4)
+                x = Math.Max(4, Width - totalW - 4);
+        }
+
+        var y = Math.Clamp(_selection.Y + 4, 4, Math.Max(4, Height - ToggleH - 4));
         return new Rectangle(x, y, totalW, ToggleH);
     }
 
@@ -370,23 +469,6 @@ public sealed class CaptureOverlayForm : Form
         path.AddArc(bounds.X, bounds.Bottom - d, d, d, 90, 90);
         path.CloseFigure();
         return path;
-    }
-
-    private int MeasureTranslationHeight()
-    {
-        if (!string.IsNullOrWhiteSpace(_targetText))
-        {
-            var width = Math.Max(40, (_selection.IsEmpty ? 200 : _selection.Width) - CardPadX * 2);
-            var size = TextRenderer.MeasureText(
-                _targetText,
-                _uiFontItalic,
-                new Size(width, int.MaxValue),
-                TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl);
-            return Math.Max(28, size.Height + CardPadY * 2);
-        }
-        if (_resultImage is not null && !_selection.IsEmpty)
-            return Math.Max(28, _selection.Height);
-        return 28;
     }
 
     private Rectangle LayoutTranslationCard()

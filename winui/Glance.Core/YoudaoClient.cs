@@ -82,6 +82,7 @@ public sealed class YoudaoClient
 
     private sealed class RawRegion
     {
+        public string BoundingBox { get; set; } = "";
         public string Context { get; set; } = "";
         public string TranContent { get; set; } = "";
     }
@@ -102,7 +103,12 @@ public sealed class YoudaoClient
 
             var pairs = ResRegions
                 .Where(r => !string.IsNullOrEmpty(r.Context) || !string.IsNullOrEmpty(r.TranContent))
-                .Select(r => new TranslationPair { Source = r.Context, Target = r.TranContent })
+                .Select(r => new TranslationPair
+                {
+                    Source = r.Context,
+                    Target = r.TranContent,
+                    Bounds = TryParseBounds(r.BoundingBox),
+                })
                 .ToList();
 
             return new TranslationResponse
@@ -114,5 +120,22 @@ public sealed class YoudaoClient
                 Pairs = pairs,
             };
         }
+    }
+
+    private static TranslationBounds? TryParseBounds(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var parts = raw.Split(',');
+        if (parts.Length != 4) return null;
+        if (!double.TryParse(parts[0].Trim(), System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var x)) return null;
+        if (!double.TryParse(parts[1].Trim(), System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var y)) return null;
+        if (!double.TryParse(parts[2].Trim(), System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var w)) return null;
+        if (!double.TryParse(parts[3].Trim(), System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var h)) return null;
+        if (w <= 0 || h <= 0) return null;
+        return new TranslationBounds { X = x, Y = y, Width = w, Height = h };
     }
 }

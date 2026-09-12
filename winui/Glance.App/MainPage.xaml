@@ -57,16 +57,19 @@
             <ToggleButton
                 x:Name="PinButton"
                 Grid.Column="4"
+                MinWidth="32"
+                Padding="6"
                 Click="OnPinClick"
-                Content="📌"
                 Style="{StaticResource GlanceToolbarToggleStyle}"
                 ToolTipService.ToolTip="置顶窗口" />
             <Button
                 x:Name="CaptureButton"
                 Grid.Column="5"
+                MinWidth="32"
+                Padding="6"
                 Click="OnCaptureClick"
-                Content="截屏翻译"
-                Style="{StaticResource GlanceToolbarButtonStyle}" />
+                Style="{StaticResource GlanceToolbarButtonStyle}"
+                ToolTipService.ToolTip="截屏翻译" />
             <Button
                 x:Name="ThemeButton"
                 Grid.Column="6"

@@ -65,6 +65,15 @@ public sealed partial class MainPage : Page
     {
         _services = AppServices.Current;
         InitializeComponent();
+
+        var pinIcon = LucideStrokeIcon.Create(LucideStrokeIcon.PinData);
+        PinButton.Content = pinIcon;
+        LucideStrokeIcon.BindToControlForeground(PinButton, pinIcon);
+
+        var captureIcon = LucideStrokeIcon.Create(LucideStrokeIcon.ScanTextData);
+        CaptureButton.Content = captureIcon;
+        LucideStrokeIcon.BindToControlForeground(CaptureButton, captureIcon);
+
         Loaded += OnLoaded;
         _mediaPlayer.MediaEnded += (_, _) =>
         {
@@ -409,16 +418,9 @@ public sealed partial class MainPage : Page
 
     private void ApplyCaptureResult(CaptureSessionResult result)
     {
+        // Only OCR-copy fills the main boxes. Screenshot translate stays on the overlay.
         if (!string.IsNullOrWhiteSpace(result.CopiedText))
-        {
             InputBox.Text = result.CopiedText;
-            return;
-        }
-
-        var pairs = result.Translation?.Pairs;
-        if (pairs is null || pairs.Count == 0) return;
-        InputBox.Text = string.Join("\n", pairs.Select(p => p.Source).Where(s => !string.IsNullOrWhiteSpace(s)));
-        OutputBox.Text = string.Join("\n", pairs.Select(p => p.Target).Where(s => !string.IsNullOrWhiteSpace(s)));
     }
 
     private async void OnTtsClick(object sender, RoutedEventArgs e)

@@ -55,6 +55,16 @@ public sealed class TranslationPair
 {
     public string Source { get; set; } = "";
     public string Target { get; set; } = "";
+    /// <summary>Region box in cropped screenshot pixels (Youdao boundingBox). Null if unknown.</summary>
+    public TranslationBounds? Bounds { get; set; }
+}
+
+public sealed class TranslationBounds
+{
+    public double X { get; set; }
+    public double Y { get; set; }
+    public double Width { get; set; }
+    public double Height { get; set; }
 }
 
 public sealed class TranslationResponse
