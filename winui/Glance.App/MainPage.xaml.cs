@@ -75,6 +75,9 @@ public sealed partial class MainPage : Page
         CaptureButton.Content = captureIcon;
         LucideStrokeIcon.BindToControlForeground(CaptureButton, captureIcon);
 
+        ApplyTtsIcon(InputTtsButton, playing: false);
+        ApplyTtsIcon(OutputTtsButton, playing: false);
+
         Loaded += OnLoaded;
         _mediaPlayer.MediaEnded += (_, _) =>
         {
@@ -448,9 +451,9 @@ public sealed partial class MainPage : Page
             _mediaPlayer.Play();
             _ttsPlaying = true;
             _ttsActiveButton = button;
-            InputTtsButton.Content = "🔊";
-            OutputTtsButton.Content = "🔊";
-            button.Content = "⏹";
+            ApplyTtsIcon(InputTtsButton, playing: false);
+            ApplyTtsIcon(OutputTtsButton, playing: false);
+            ApplyTtsIcon(button, playing: true);
         }
         catch (Exception ex)
         {
@@ -470,8 +473,17 @@ public sealed partial class MainPage : Page
     {
         _ttsPlaying = false;
         _ttsActiveButton = null;
-        InputTtsButton.Content = "🔊";
-        OutputTtsButton.Content = "🔊";
+        ApplyTtsIcon(InputTtsButton, playing: false);
+        ApplyTtsIcon(OutputTtsButton, playing: false);
+    }
+
+    private static void ApplyTtsIcon(Button button, bool playing)
+    {
+        var icon = LucideStrokeIcon.Create(
+            playing ? LucideStrokeIcon.SquareData : LucideStrokeIcon.Volume2Data,
+            size: 14);
+        button.Content = icon;
+        LucideStrokeIcon.BindToControlForeground(button, icon);
     }
 
     private void OnInputChanged(object sender, TextChangedEventArgs e)

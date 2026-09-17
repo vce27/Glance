@@ -99,8 +99,7 @@
                     HorizontalAlignment="Right"
                     VerticalAlignment="Bottom"
                     Click="OnTtsClick"
-                    Content="🔊"
-                    Style="{StaticResource GlanceToolbarButtonStyle}"
+                    Style="{StaticResource GlancePaneActionButtonStyle}"
                     Tag="input"
                     ToolTipService.ToolTip="朗读原文" />
             </Grid>
@@ -120,8 +119,7 @@
                     HorizontalAlignment="Right"
                     VerticalAlignment="Bottom"
                     Click="OnTtsClick"
-                    Content="🔊"
-                    Style="{StaticResource GlanceToolbarButtonStyle}"
+                    Style="{StaticResource GlancePaneActionButtonStyle}"
                     Tag="output"
                     ToolTipService.ToolTip="朗读译文" />
             </Grid>

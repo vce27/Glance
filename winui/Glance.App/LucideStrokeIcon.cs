@@ -15,6 +15,15 @@ internal static class LucideStrokeIcon
     public const string ScanTextData =
         "M3,7 V5 A2,2 0 0 1 5,3 H7 M17,3 H19 A2,2 0 0 1 21,5 V7 M21,17 V19 A2,2 0 0 1 19,21 H17 M7,21 H5 A2,2 0 0 1 3,19 V17 M7,8 H15 M7,12 H17 M7,16 H13";
 
+    public const string Volume2Data =
+        "M11,4.702 a0.705,0.705 0 0 0 -1.203,-0.498 L6.413,7.587 A1.4,1.4 0 0 1 5.416,8 H3 a1,1 0 0 0 -1,1 v6 a1,1 0 0 0 1,1 h2.416 a1.4,1.4 0 0 1 0.997,0.413 l3.383,3.384 A0.705,0.705 0 0 0 11,19.298 z M16,9 a5,5 0 0 1 0,6 M19.364,18.364 a9,9 0 0 0 0,-12.728";
+
+    public const string SquareData =
+        "M5,5 H19 V19 H5 Z";
+
+    public const string SettingsData =
+        "M12.22,2 h-0.44 a2,2 0 0 0 -2,2 v0.18 a2,2 0 0 1 -1,1.73 l-0.43,0.25 a2,2 0 0 1 -2,0 l-0.15,-0.08 a2,2 0 0 0 -2.73,0.73 l-0.22,0.38 a2,2 0 0 0 0.73,2.73 l0.15,0.1 a2,2 0 0 1 1,1.72 v0.51 a2,2 0 0 1 -1,1.74 l-0.15,0.09 a2,2 0 0 0 -0.73,2.73 l0.22,0.38 a2,2 0 0 0 2.73,0.73 l0.15,-0.08 a2,2 0 0 1 2,0 l0.43,0.25 a2,2 0 0 1 1,1.73 V20 a2,2 0 0 0 2,2 h0.44 a2,2 0 0 0 2,-2 v-0.18 a2,2 0 0 1 1,-1.73 l0.43,-0.25 a2,2 0 0 1 2,0 l0.15,0.08 a2,2 0 0 0 2.73,-0.73 l0.22,-0.39 a2,2 0 0 0 -0.73,-2.73 l-0.15,-0.08 a2,2 0 0 1 -1,-1.74 v-0.5 a2,2 0 0 1 1,-1.74 l0.15,-0.09 a2,2 0 0 0 0.73,-2.73 l-0.22,-0.38 a2,2 0 0 0 -2.73,-0.73 l-0.15,0.08 a2,2 0 0 1 -2,0 l-0.43,-0.25 a2,2 0 0 1 -1,-1.73 V4 a2,2 0 0 0 -2,-2 z M12,15 a3,3 0 1 0 0,-6 a3,3 0 1 0 0,6 z";
+
     public static Viewbox Create(string pathData, double size = 16)
     {
         var path = (ShapePath)XamlReader.Load(
@@ -48,12 +57,18 @@ internal static class LucideStrokeIcon
                 path.Stroke = brush;
         }
 
-        host.Loaded += (_, _) =>
+        void Attach()
         {
             Sync();
             var presenter = FindDescendant<ContentPresenter>(host);
             presenter?.RegisterPropertyChangedCallback(ContentPresenter.ForegroundProperty, (_, _) => Sync());
-        };
+        }
+
+        if (host.IsLoaded)
+            Attach();
+        else
+            host.Loaded += (_, _) => Attach();
+
         host.ActualThemeChanged += (_, _) => Sync();
     }
 
