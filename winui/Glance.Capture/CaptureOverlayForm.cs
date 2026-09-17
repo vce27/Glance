@@ -32,7 +32,10 @@ public sealed class CaptureOverlayForm : Form
     private const int ToggleW = 36;
     private const int ToggleH = 20;
     private const int ToggleGap = 6;
+    private const int ToolbarGap = 8;
     private const string CompareLabel = "对比";
+    private const string CopyLabel = "复制原文";
+    private const string CopiedLabel = "已复制";
     private readonly Font _toggleLabelFont = new("Microsoft YaHei UI", 9f, FontStyle.Regular);
 
     private readonly Bitmap _screen;
@@ -72,7 +75,9 @@ public sealed class CaptureOverlayForm : Form
     private Rectangle _translationCard;
     private int _translationCardHeight = 28;
     private Rectangle _compareToggle;
+    private Rectangle _copyButton;
     private bool _showCompare = true;
+    private string _copyButtonText = CopyLabel;
 
     /// <summary>When true: original in selection + translation card. When false: translation fills selection.</summary>
     public bool ShowCompareOverlay
@@ -175,6 +180,7 @@ public sealed class CaptureOverlayForm : Form
 
         _showingResult = true;
         _statusText = null;
+        _copyButtonText = CopyLabel;
         _translationCardHeight = MeasureTranslationHeight();
         _translationCard = LayoutTranslationCard();
         Cursor = Cursors.Default;
@@ -268,9 +274,10 @@ public sealed class CaptureOverlayForm : Form
             _translationCard = Rectangle.Empty;
         }
 
-        // Draw last so a large translation card never covers the control.
-        _compareToggle = LayoutCompareToggle();
+        // Draw last so a large translation card never covers the controls.
+        LayoutToolbar(out _compareToggle, out _copyButton);
         DrawCompareToggle(g);
+        DrawCopyButton(g);
     }
 
     private void DrawTranslationInSelection(Graphics g)
@@ -395,7 +402,7 @@ public sealed class CaptureOverlayForm : Form
     {
         if (_compareToggle.IsEmpty) return;
 
-        var labelW = MeasureCompareLabelWidth();
+        var labelW = MeasureLabelWidth(CompareLabel);
         var labelRect = new Rectangle(_compareToggle.X, _compareToggle.Y, labelW, ToggleH);
         var track = new Rectangle(
             _compareToggle.X + labelW + ToggleGap,
@@ -428,35 +435,66 @@ public sealed class CaptureOverlayForm : Form
         g.FillEllipse(_toggleThumb, new Rectangle(thumbX, track.Y + pad, thumbSize, thumbSize));
     }
 
-    private int MeasureCompareLabelWidth()
+    private void DrawCopyButton(Graphics g)
+    {
+        if (_copyButton.IsEmpty) return;
+
+        using (var bg = new SolidBrush(Color.FromArgb(200, 0, 0, 0)))
+        using (var path = RoundedRect(_copyButton, ToggleH / 2))
+            g.FillPath(bg, path);
+
+        using var nearCenter = new StringFormat
+        {
+            Alignment = StringAlignment.Center,
+            LineAlignment = StringAlignment.Center,
+            FormatFlags = StringFormatFlags.NoClip | StringFormatFlags.NoWrap,
+        };
+        g.DrawString(_copyButtonText, _toggleLabelFont, _whiteBrush, _copyButton, nearCenter);
+    }
+
+    private int MeasureLabelWidth(string label)
     {
         // TextRenderer under-measures CJK with NoPadding; MeasureString is reliable.
         using var bmp = new Bitmap(1, 1);
         using var g = Graphics.FromImage(bmp);
         g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
-        var size = g.MeasureString(CompareLabel, _toggleLabelFont);
+        var size = g.MeasureString(label, _toggleLabelFont);
         return Math.Max(36, (int)Math.Ceiling(size.Width) + 2);
     }
 
-    private Rectangle LayoutCompareToggle()
+    private int MeasureCopyButtonWidth()
     {
-        if (_selection.IsEmpty) return Rectangle.Empty;
-        var labelW = MeasureCompareLabelWidth();
-        var totalW = labelW + ToggleGap + ToggleW + 8; // +8 for label chip inflate
-        const int gap = 8;
+        var label = _copyButtonText == CopiedLabel ? CopiedLabel : CopyLabel;
+        return MeasureLabelWidth(label) + 16;
+    }
+
+    private int MeasureCompareToggleWidth()
+        => MeasureLabelWidth(CompareLabel) + ToggleGap + ToggleW + 8; // +8 for label chip inflate
+
+    private void LayoutToolbar(out Rectangle compareToggle, out Rectangle copyButton)
+    {
+        compareToggle = Rectangle.Empty;
+        copyButton = Rectangle.Empty;
+        if (_selection.IsEmpty) return;
+
+        var compareW = MeasureCompareToggleWidth();
+        var copyW = MeasureCopyButtonWidth();
+        var totalW = Math.Max(compareW, copyW);
+        const int stackGap = 6;
+        var totalH = ToggleH * 2 + stackGap;
 
         // Prefer the right of the selection so large regions still leave the control visible.
-        var x = _selection.Right + gap;
+        var x = _selection.Right + ToolbarGap;
         if (x + totalW > Width - 4)
         {
-            // No room outside — pin inside the selection's right edge.
-            x = Math.Max(4, _selection.Right - totalW - gap);
+            x = Math.Max(4, _selection.Right - totalW - ToolbarGap);
             if (x + totalW > Width - 4)
                 x = Math.Max(4, Width - totalW - 4);
         }
 
-        var y = Math.Clamp(_selection.Y + 4, 4, Math.Max(4, Height - ToggleH - 4));
-        return new Rectangle(x, y, totalW, ToggleH);
+        var y = Math.Clamp(_selection.Y + 4, 4, Math.Max(4, Height - totalH - 4));
+        compareToggle = new Rectangle(x, y, compareW, ToggleH);
+        copyButton = new Rectangle(x, y + ToggleH + stackGap, copyW, ToggleH);
     }
 
     private static GraphicsPath RoundedRect(Rectangle bounds, int radius)
@@ -495,7 +533,13 @@ public sealed class CaptureOverlayForm : Form
 
         if (_showingResult)
         {
-            _compareToggle = LayoutCompareToggle();
+            LayoutToolbar(out _compareToggle, out _copyButton);
+            if (!_copyButton.IsEmpty && _copyButton.Contains(e.Location))
+            {
+                CopyOcrText();
+                return;
+            }
+
             if (!_compareToggle.IsEmpty && _compareToggle.Contains(e.Location))
             {
                 _showCompare = !_showCompare;
@@ -572,8 +616,9 @@ public sealed class CaptureOverlayForm : Form
 
         if (_showingResult && _dragMode == DragMode.None)
         {
-            _compareToggle = LayoutCompareToggle();
-            if (!_compareToggle.IsEmpty && _compareToggle.Contains(e.Location))
+            LayoutToolbar(out _compareToggle, out _copyButton);
+            if ((!_compareToggle.IsEmpty && _compareToggle.Contains(e.Location))
+                || (!_copyButton.IsEmpty && _copyButton.Contains(e.Location)))
             {
                 Cursor = Cursors.Hand;
                 return;
@@ -607,10 +652,27 @@ public sealed class CaptureOverlayForm : Form
             dirty = Rectangle.Union(dirty, new Rectangle(after.X, after.Bottom, Math.Max(1, after.Width), band));
             dirty = Rectangle.Union(dirty, new Rectangle(before.X, before.Y - band, Math.Max(1, before.Width), band));
             dirty = Rectangle.Union(dirty, new Rectangle(after.X, after.Y - band, Math.Max(1, after.Width), band));
-            dirty = Rectangle.Union(dirty, InflateRect(LayoutCompareToggle(), 4));
+            LayoutToolbar(out var compare, out var copy);
+            dirty = Rectangle.Union(dirty, InflateRect(compare, 4));
+            dirty = Rectangle.Union(dirty, InflateRect(copy, 4));
         }
         dirty.Intersect(ClientRectangle);
         if (!dirty.IsEmpty) Invalidate(dirty);
+    }
+
+    private void CopyOcrText()
+    {
+        var text = string.Join("\n", _pairs
+            .Select(p => p.Source)
+            .Where(s => !string.IsNullOrWhiteSpace(s)));
+        if (string.IsNullOrWhiteSpace(text)) return;
+
+        try { Clipboard.SetText(text); }
+        catch { return; }
+
+        _copyButtonText = CopiedLabel;
+        Invalidate(InflateRect(_copyButton, 4));
+        Update();
     }
 
     private static Rectangle InflateRect(Rectangle r, int pad)

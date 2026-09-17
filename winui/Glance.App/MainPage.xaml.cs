@@ -60,6 +60,7 @@ public sealed partial class MainPage : Page
     private DispatcherTimer? _debounce;
     private bool _loadingUi;
     private bool _ttsPlaying;
+    private Button? _ttsActiveButton;
 
     public MainPage()
     {
@@ -77,11 +78,7 @@ public sealed partial class MainPage : Page
         Loaded += OnLoaded;
         _mediaPlayer.MediaEnded += (_, _) =>
         {
-            DispatcherQueue.TryEnqueue(() =>
-            {
-                _ttsPlaying = false;
-                TtsButton.Content = "🔊";
-            });
+            DispatcherQueue.TryEnqueue(ResetTtsButtons);
         };
     }
 
@@ -425,21 +422,21 @@ public sealed partial class MainPage : Page
 
     private async void OnTtsClick(object sender, RoutedEventArgs e)
     {
-        var text = InputBox.Text?.Trim() ?? "";
+        if (sender is not Button button) return;
+        var forOutput = Equals(button.Tag, "output");
+        var text = (forOutput ? OutputBox.Text : InputBox.Text)?.Trim() ?? "";
         if (string.IsNullOrEmpty(text)) return;
 
         if (_ttsPlaying)
         {
-            _mediaPlayer.Pause();
-            _mediaPlayer.Source = null;
-            _ttsPlaying = false;
-            TtsButton.Content = "🔊";
-            return;
+            var same = ReferenceEquals(_ttsActiveButton, button);
+            StopTts();
+            if (same) return;
         }
 
         try
         {
-            var lang = LangValue(FromLangBox);
+            var lang = LangValue(forOutput ? ToLangBox : FromLangBox);
             if (lang == "auto") lang = "zh-CHS";
             var bcp47 = TtsLangMap.GetValueOrDefault(lang, lang);
             var voice = SpeechSynthesizer.AllVoices
@@ -450,14 +447,31 @@ public sealed partial class MainPage : Page
             _mediaPlayer.Source = MediaSource.CreateFromStream(stream, stream.ContentType);
             _mediaPlayer.Play();
             _ttsPlaying = true;
-            TtsButton.Content = "⏹";
+            _ttsActiveButton = button;
+            InputTtsButton.Content = "🔊";
+            OutputTtsButton.Content = "🔊";
+            button.Content = "⏹";
         }
         catch (Exception ex)
         {
             StatusText.Text = "朗读失败: " + ex.Message;
-            _ttsPlaying = false;
-            TtsButton.Content = "🔊";
+            ResetTtsButtons();
         }
+    }
+
+    private void StopTts()
+    {
+        _mediaPlayer.Pause();
+        _mediaPlayer.Source = null;
+        ResetTtsButtons();
+    }
+
+    private void ResetTtsButtons()
+    {
+        _ttsPlaying = false;
+        _ttsActiveButton = null;
+        InputTtsButton.Content = "🔊";
+        OutputTtsButton.Content = "🔊";
     }
 
     private void OnInputChanged(object sender, TextChangedEventArgs e)
