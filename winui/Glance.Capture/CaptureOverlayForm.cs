@@ -33,9 +33,8 @@ public sealed class CaptureOverlayForm : Form
     private const int ToggleH = 20;
     private const int ToggleGap = 6;
     private const int ToolbarGap = 8;
+    private const int CopyBtnSize = 24;
     private const string CompareLabel = "对比";
-    private const string CopyLabel = "复制原文";
-    private const string CopiedLabel = "已复制";
     private readonly Font _toggleLabelFont = new("Microsoft YaHei UI", 9f, FontStyle.Regular);
 
     private readonly Bitmap _screen;
@@ -77,7 +76,7 @@ public sealed class CaptureOverlayForm : Form
     private Rectangle _compareToggle;
     private Rectangle _copyButton;
     private bool _showCompare = true;
-    private string _copyButtonText = CopyLabel;
+    private bool _copyDone;
 
     /// <summary>When true: original in selection + translation card. When false: translation fills selection.</summary>
     public bool ShowCompareOverlay
@@ -180,7 +179,7 @@ public sealed class CaptureOverlayForm : Form
 
         _showingResult = true;
         _statusText = null;
-        _copyButtonText = CopyLabel;
+        _copyDone = false;
         _translationCardHeight = MeasureTranslationHeight();
         _translationCard = LayoutTranslationCard();
         Cursor = Cursors.Default;
@@ -440,16 +439,57 @@ public sealed class CaptureOverlayForm : Form
         if (_copyButton.IsEmpty) return;
 
         using (var bg = new SolidBrush(Color.FromArgb(200, 0, 0, 0)))
-        using (var path = RoundedRect(_copyButton, ToggleH / 2))
+        using (var path = RoundedRect(_copyButton, CopyBtnSize / 2))
             g.FillPath(bg, path);
 
-        using var nearCenter = new StringFormat
+        var pad = 5;
+        var icon = Rectangle.Inflate(_copyButton, -pad, -pad);
+        using var pen = new Pen(Color.White, 1.6f)
         {
-            Alignment = StringAlignment.Center,
-            LineAlignment = StringAlignment.Center,
-            FormatFlags = StringFormatFlags.NoClip | StringFormatFlags.NoWrap,
+            StartCap = LineCap.Round,
+            EndCap = LineCap.Round,
+            LineJoin = LineJoin.Round,
         };
-        g.DrawString(_copyButtonText, _toggleLabelFont, _whiteBrush, _copyButton, nearCenter);
+
+        if (_copyDone)
+        {
+            // Checkmark
+            var x0 = icon.X + icon.Width * 0.15f;
+            var y0 = icon.Y + icon.Height * 0.52f;
+            var x1 = icon.X + icon.Width * 0.40f;
+            var y1 = icon.Y + icon.Height * 0.75f;
+            var x2 = icon.X + icon.Width * 0.85f;
+            var y2 = icon.Y + icon.Height * 0.28f;
+            g.DrawLines(pen, [new PointF(x0, y0), new PointF(x1, y1), new PointF(x2, y2)]);
+            return;
+        }
+
+        // Lucide-style copy: back page + front page
+        var back = new RectangleF(
+            icon.X + icon.Width * 0.28f,
+            icon.Y,
+            icon.Width * 0.72f,
+            icon.Height * 0.72f);
+        var front = new RectangleF(
+            icon.X,
+            icon.Y + icon.Height * 0.28f,
+            icon.Width * 0.72f,
+            icon.Height * 0.72f);
+        var r = Math.Max(1.5f, icon.Width * 0.12f);
+        DrawRoundRectStroke(g, pen, back, r);
+        DrawRoundRectStroke(g, pen, front, r);
+    }
+
+    private static void DrawRoundRectStroke(Graphics g, Pen pen, RectangleF bounds, float radius)
+    {
+        using var path = new GraphicsPath();
+        var d = radius * 2;
+        path.AddArc(bounds.X, bounds.Y, d, d, 180, 90);
+        path.AddArc(bounds.Right - d, bounds.Y, d, d, 270, 90);
+        path.AddArc(bounds.Right - d, bounds.Bottom - d, d, d, 0, 90);
+        path.AddArc(bounds.X, bounds.Bottom - d, d, d, 90, 90);
+        path.CloseFigure();
+        g.DrawPath(pen, path);
     }
 
     private int MeasureLabelWidth(string label)
@@ -462,12 +502,6 @@ public sealed class CaptureOverlayForm : Form
         return Math.Max(36, (int)Math.Ceiling(size.Width) + 2);
     }
 
-    private int MeasureCopyButtonWidth()
-    {
-        var label = _copyButtonText == CopiedLabel ? CopiedLabel : CopyLabel;
-        return MeasureLabelWidth(label) + 16;
-    }
-
     private int MeasureCompareToggleWidth()
         => MeasureLabelWidth(CompareLabel) + ToggleGap + ToggleW + 8; // +8 for label chip inflate
 
@@ -478,10 +512,10 @@ public sealed class CaptureOverlayForm : Form
         if (_selection.IsEmpty) return;
 
         var compareW = MeasureCompareToggleWidth();
-        var copyW = MeasureCopyButtonWidth();
+        var copyW = CopyBtnSize;
         var totalW = Math.Max(compareW, copyW);
         const int stackGap = 6;
-        var totalH = ToggleH * 2 + stackGap;
+        var totalH = ToggleH + stackGap + CopyBtnSize;
 
         // Prefer the right of the selection so large regions still leave the control visible.
         var x = _selection.Right + ToolbarGap;
@@ -494,7 +528,7 @@ public sealed class CaptureOverlayForm : Form
 
         var y = Math.Clamp(_selection.Y + 4, 4, Math.Max(4, Height - totalH - 4));
         compareToggle = new Rectangle(x, y, compareW, ToggleH);
-        copyButton = new Rectangle(x, y + ToggleH + stackGap, copyW, ToggleH);
+        copyButton = new Rectangle(x, y + ToggleH + stackGap, copyW, CopyBtnSize);
     }
 
     private static GraphicsPath RoundedRect(Rectangle bounds, int radius)
@@ -670,7 +704,7 @@ public sealed class CaptureOverlayForm : Form
         try { Clipboard.SetText(text); }
         catch { return; }
 
-        _copyButtonText = CopiedLabel;
+        _copyDone = true;
         Invalidate(InflateRect(_copyButton, 4));
         Update();
     }
