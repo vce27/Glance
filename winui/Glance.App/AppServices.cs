@@ -179,8 +179,18 @@ public sealed class AppServices
         AutostartHelper.Apply(enabled, exe);
     }
 
+    public void SuspendHotkeys() => _hotkeys.UnregisterAll();
+
+    /// <summary>Cancel transient UI (hotkey recording, etc.) before capture or other modal flows.</summary>
+    public Action? CancelUiTransientState { get; set; }
+
     public void ReregisterHotkeys(TranslatorSettings settings)
+        => _ = TryReregisterHotkeys(settings, out _);
+
+    /// <returns>false if any chord failed to register; <paramref name="failed"/> lists labels.</returns>
+    public bool TryReregisterHotkeys(TranslatorSettings settings, out List<string> failed)
     {
+        failed = [];
         _hotkeys.UnregisterAll();
         _hotkeys.EnsureCreated();
         _hotkeys.OnHotkey = id =>
@@ -193,24 +203,33 @@ public sealed class AppServices
             });
         };
 
-        var failed = new List<string>();
         if (!string.IsNullOrWhiteSpace(settings.Hotkey))
         {
-            if (!HotkeyParser.TryParse(settings.Hotkey, out var t) || !_hotkeys.Register(HotkeyIdTranslate, t))
-                failed.Add("截屏翻译");
+            var raw = HotkeyParser.Canonicalize(settings.Hotkey) ?? settings.Hotkey;
+            if (!HotkeyParser.TryParse(raw, out var t) || !_hotkeys.Register(HotkeyIdTranslate, t))
+                failed.Add($"截屏翻译({raw})");
+            else
+                settings.Hotkey = raw;
         }
         if (!string.IsNullOrWhiteSpace(settings.CopyHotkey))
         {
-            if (!HotkeyParser.TryParse(settings.CopyHotkey, out var c) || !_hotkeys.Register(HotkeyIdCopy, c))
-                failed.Add("OCR 复制");
+            var raw = HotkeyParser.Canonicalize(settings.CopyHotkey) ?? settings.CopyHotkey;
+            if (!HotkeyParser.TryParse(raw, out var c) || !_hotkeys.Register(HotkeyIdCopy, c))
+                failed.Add($"OCR 复制({raw})");
+            else
+                settings.CopyHotkey = raw;
         }
         if (!string.IsNullOrWhiteSpace(settings.PopupShortcut))
         {
-            if (!HotkeyParser.TryParse(settings.PopupShortcut, out var p) || !_hotkeys.Register(HotkeyIdPopup, p))
-                failed.Add("弹出主窗");
+            var raw = HotkeyParser.Canonicalize(settings.PopupShortcut) ?? settings.PopupShortcut;
+            if (!HotkeyParser.TryParse(raw, out var p) || !_hotkeys.Register(HotkeyIdPopup, p))
+                failed.Add($"弹出主窗({raw})");
+            else
+                settings.PopupShortcut = raw;
         }
         if (failed.Count > 0)
-            ReportStatus("热键注册失败: " + string.Join("、", failed));
+            ReportStatus("热键注册失败: " + string.Join("、", failed) + "（可能被其他软件占用）");
+        return failed.Count == 0;
     }
 
     public async Task<CaptureSessionResult> BeginCaptureAsync(CaptureMode mode)
@@ -220,6 +239,10 @@ public sealed class AppServices
             ReportStatus("已有截屏任务进行中");
             return new CaptureSessionResult { Cancelled = true };
         }
+
+        // Drop hotkey-recording / other transient UI so global hooks are armed again
+        // after capture, and recording cannot leave SuspendHotkeys stuck.
+        try { CancelUiTransientState?.Invoke(); } catch { /* ignore */ }
 
         ReportStatus(mode == CaptureMode.CopyText ? "识别中…" : "截屏翻译中…");
         var wasShown = MainWindowShown;
@@ -280,15 +303,17 @@ public sealed class AppServices
     {
         if (MainWindow is null) return;
         var hwnd = WindowNative.GetWindowHandle(MainWindow);
-        var deadline = Environment.TickCount64 + 300;
+        var deadline = Environment.TickCount64 + 200;
         while (Environment.TickCount64 < deadline)
         {
             if (!IsWindowVisible(hwnd) && !MainWindow.AppWindow.IsVisible)
-                break;
+            {
+                // One short settle after cloak/hide; avoid a fixed 50ms tax every capture.
+                await Task.Delay(16);
+                return;
+            }
             await Task.Delay(16);
         }
-        // One extra composition frame — hide alone is not enough with Mica.
-        await Task.Delay(50);
     }
 
     private static void SetWindowCloaked(IntPtr hwnd, bool cloak)

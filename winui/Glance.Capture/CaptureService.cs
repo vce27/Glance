@@ -29,6 +29,9 @@ public sealed class CaptureService
 
     public bool IsBusy => Interlocked.CompareExchange(ref _busy, 0, 0) != 0;
 
+    /// <summary>Raised when the overlay toggles compare mode so the main settings UI can stay in sync.</summary>
+    public event Action<bool>? ComparePreferenceChanged;
+
     public Task<CaptureSessionResult> RunAsync(CaptureMode mode, CancellationToken ct = default)
     {
         if (Interlocked.Exchange(ref _busy, 1) == 1)
@@ -53,6 +56,7 @@ public sealed class CaptureService
                         var s = _store.LoadSettings();
                         s.ShowCompareOverlay = show;
                         _store.SaveSettings(s);
+                        ComparePreferenceChanged?.Invoke(show);
                     }
                     catch { /* ignore */ }
                 };
@@ -84,20 +88,20 @@ public sealed class CaptureService
                     var sel = overlay.Result.Selection;
                     var png = MonitorCapture.CropToPng(snapshot.Bitmap, sel);
 
-                    overlay.ShowLoading(mode == CaptureMode.CopyText ? "识别中…" : "翻译中…");
+                    overlay.ShowLoading(mode == CaptureMode.CopyText ? "识别中… Esc 取消" : "翻译中… Esc 取消");
                     Application.DoEvents();
 
                     TranslationResponse response;
                     try
                     {
-                        response = _youdao.TranslateImageAsync(
-                            png,
-                            "capture.png",
-                            "image/png",
-                            settings.FromLang,
-                            settings.ToLang,
-                            settings,
-                            ct: ct).GetAwaiter().GetResult();
+                        response = TranslateWhilePumping(overlay, pulse, png, settings, ct);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        tcs.TrySetResult(lastTranslation is null
+                            ? new CaptureSessionResult { Cancelled = true }
+                            : new CaptureSessionResult { Translation = lastTranslation, Cancelled = false });
+                        return;
                     }
                     catch (Exception ex)
                     {
@@ -172,6 +176,51 @@ public sealed class CaptureService
         thread.Name = "glance-capture";
         thread.Start();
         return tcs.Task;
+    }
+
+    /// <summary>
+    /// Run Youdao OCR/translate without blocking the overlay STA message pump,
+    /// so Esc can still cancel mid-request.
+    /// </summary>
+    private TranslationResponse TranslateWhilePumping(
+        CaptureOverlayForm overlay,
+        AutoResetEvent pulse,
+        byte[] png,
+        TranslatorSettings settings,
+        CancellationToken ct)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var task = _youdao.TranslateImageAsync(
+            png,
+            "capture.png",
+            "image/png",
+            settings.FromLang,
+            settings.ToLang,
+            settings,
+            ct: linked.Token);
+
+        while (!task.IsCompleted)
+        {
+            Application.DoEvents();
+            if (overlay.IsDisposed || overlay.Result?.Kind == CaptureOverlayResultKind.Cancelled)
+            {
+                linked.Cancel();
+                try { task.GetAwaiter().GetResult(); }
+                catch { /* cancelled / faulted */ }
+                throw new OperationCanceledException();
+            }
+            if (ct.IsCancellationRequested)
+            {
+                linked.Cancel();
+                overlay.Finish(CaptureOverlayResultKind.Cancelled);
+                try { task.GetAwaiter().GetResult(); }
+                catch { /* cancelled */ }
+                throw new OperationCanceledException(ct);
+            }
+            pulse.WaitOne(16);
+        }
+
+        return task.GetAwaiter().GetResult();
     }
 
     private static void WaitOverlay(

@@ -1,16 +1,13 @@
+using System.Runtime.InteropServices;
 using Glance.Capture;
 using Glance.Core;
-using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
-using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.Media.Core;
 using Windows.Media.Playback;
 using Windows.Media.SpeechSynthesis;
-using Windows.System;
-using Windows.UI.Core;
 
 namespace Glance.App;
 
@@ -65,6 +62,12 @@ public sealed partial class MainPage : Page
     private bool _loadingUi;
     private bool _ttsPlaying;
     private Button? _ttsActiveButton;
+    private Button? _hotkeyRecordingButton;
+    private string? _hotkeyRecordingPrevious;
+    private DispatcherTimer? _hotkeyPollTimer;
+    private readonly HashSet<int> _hotkeyPollSeen = [];
+    private const string HotkeyEmptyLabel = "点击设置快捷键";
+    private const string HotkeyRecordingLabel = "按下快捷键…";
 
     public MainPage()
     {
@@ -121,9 +124,9 @@ public sealed partial class MainPage : Page
         var dark = string.Equals(_settings.UiTheme, "dark", StringComparison.OrdinalIgnoreCase);
         ThemeSwitch.IsOn = dark;
         AutoUpdateSwitch.IsOn = _settings.AutoCheckUpdates;
-        HotkeyBox.Text = _settings.Hotkey;
-        CopyHotkeyBox.Text = _settings.CopyHotkey;
-        PopupHotkeyBox.Text = _settings.PopupShortcut ?? "";
+        SetHotkeyButton(HotkeyButton, HotkeyParser.Canonicalize(_settings.Hotkey));
+        SetHotkeyButton(CopyHotkeyButton, HotkeyParser.Canonicalize(_settings.CopyHotkey));
+        SetHotkeyButton(PopupHotkeyButton, HotkeyParser.Canonicalize(_settings.PopupShortcut));
         CustomProxyBox.Text = _settings.CustomProxy;
         LlmBaseUrlBox.Text = _settings.LlmConfig.BaseUrl;
         LlmApiKeyBox.Password = _settings.LlmConfig.ApiKey;
@@ -133,8 +136,17 @@ public sealed partial class MainPage : Page
         HighlightEngine();
         UpdateEngineDependentUi();
         _services.ApplyPin(_settings.PinOnTop);
+        _services.CancelUiTransientState = () => CancelHotkeyRecording(restore: true);
         _services.StatusChanged += msg => DispatcherQueue.TryEnqueue(() => StatusText.Text = msg);
         _services.CaptureCompleted += result => DispatcherQueue.TryEnqueue(() => ApplyCaptureResult(result));
+        _services.Capture.ComparePreferenceChanged += show => DispatcherQueue.TryEnqueue(() =>
+        {
+            if (_settings.ShowCompareOverlay == show) return;
+            _loadingUi = true;
+            _settings.ShowCompareOverlay = show;
+            CompareOverlaySwitch.IsOn = show;
+            _loadingUi = false;
+        });
         UpdateStatusText.Text = $"当前版本 {_services.Updates.CurrentVersionDisplay}";
         ApplyUpdateButton.Visibility = Visibility.Collapsed;
         _loadingUi = false;
@@ -224,24 +236,93 @@ public sealed partial class MainPage : Page
     private void PersistSettings()
     {
         if (_loadingUi) return;
+
+        var prevHotkey = _settings.Hotkey;
+        var prevCopy = _settings.CopyHotkey;
+        var prevPopup = _settings.PopupShortcut;
+
         _settings.FromLang = LangValue(FromLangBox);
         _settings.ToLang = LangValue(ToLangBox);
         _settings.PinOnTop = PinButton.IsChecked == true;
         _settings.Autostart = AutostartSwitch.IsOn;
         _settings.ShowCompareOverlay = CompareOverlaySwitch.IsOn;
         _settings.UiTheme = ThemeSwitch.IsOn ? "dark" : "light";
-        _settings.Hotkey = HotkeyBox.Text.Trim();
-        _settings.CopyHotkey = CopyHotkeyBox.Text.Trim();
-        var popup = PopupHotkeyBox.Text.Trim();
-        _settings.PopupShortcut = string.IsNullOrEmpty(popup) ? null : popup;
         _settings.CustomProxy = CustomProxyBox.Text.Trim();
         _settings.LlmConfig.BaseUrl = LlmBaseUrlBox.Text.Trim();
         _settings.LlmConfig.ApiKey = LlmApiKeyBox.Password;
         _settings.LlmConfig.Model = LlmModelBox.Text.Trim();
         _settings.AutoCheckUpdates = AutoUpdateSwitch.IsOn;
-        _services.Store.SaveSettings(_settings);
+
+        // While recording, never re-arm RegisterHotKey (it would swallow the chord).
+        if (_hotkeyRecordingButton is not null)
+        {
+            _services.Store.SaveSettings(_settings);
+            _services.ApplyAutostart(_settings.Autostart);
+            return;
+        }
+
+        var nextHotkey = ReadHotkeyButton(HotkeyButton) ?? "";
+        var nextCopy = ReadHotkeyButton(CopyHotkeyButton) ?? "";
+        var nextPopup = ReadHotkeyButton(PopupHotkeyButton);
+
+        if (HasHotkeyConflict(nextHotkey, nextCopy, nextPopup))
+        {
+            StatusText.Text = "热键冲突：同一快捷键不能用于多项，请改其中一个";
+            SetHotkeyButton(HotkeyButton, string.IsNullOrEmpty(prevHotkey) ? null : prevHotkey);
+            SetHotkeyButton(CopyHotkeyButton, string.IsNullOrEmpty(prevCopy) ? null : prevCopy);
+            SetHotkeyButton(PopupHotkeyButton, prevPopup);
+            _settings.Hotkey = prevHotkey;
+            _settings.CopyHotkey = prevCopy;
+            _settings.PopupShortcut = prevPopup;
+            _services.Store.SaveSettings(_settings);
+            _services.ApplyAutostart(_settings.Autostart);
+            _services.ReregisterHotkeys(_settings);
+            return;
+        }
+
+        _settings.Hotkey = nextHotkey;
+        _settings.CopyHotkey = nextCopy;
+        _settings.PopupShortcut = nextPopup;
         _services.ApplyAutostart(_settings.Autostart);
-        _services.ReregisterHotkeys(_settings);
+
+        if (!_services.TryReregisterHotkeys(_settings, out var failed) && failed.Count > 0)
+        {
+            // Keep previously working bindings on disk/UI when Windows rejects the new chord.
+            if (failed.Exists(f => f.StartsWith("截屏翻译", StringComparison.Ordinal)))
+            {
+                _settings.Hotkey = prevHotkey;
+                SetHotkeyButton(HotkeyButton, string.IsNullOrEmpty(prevHotkey) ? null : prevHotkey);
+            }
+            if (failed.Exists(f => f.StartsWith("OCR 复制", StringComparison.Ordinal)))
+            {
+                _settings.CopyHotkey = prevCopy;
+                SetHotkeyButton(CopyHotkeyButton, string.IsNullOrEmpty(prevCopy) ? null : prevCopy);
+            }
+            if (failed.Exists(f => f.StartsWith("弹出主窗", StringComparison.Ordinal)))
+            {
+                _settings.PopupShortcut = prevPopup;
+                SetHotkeyButton(PopupHotkeyButton, prevPopup);
+            }
+            _services.ReregisterHotkeys(_settings);
+        }
+
+        _services.Store.SaveSettings(_settings);
+    }
+
+    private static bool HasHotkeyConflict(string? a, string? b, string? c)
+    {
+        static string? Norm(string? s)
+        {
+            if (string.IsNullOrWhiteSpace(s)) return null;
+            return HotkeyParser.Canonicalize(s)?.ToUpperInvariant() ?? s.Trim().ToUpperInvariant();
+        }
+        var set = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var item in new[] { Norm(a), Norm(b), Norm(c) })
+        {
+            if (item is null) continue;
+            if (!set.Add(item)) return true;
+        }
+        return false;
     }
 
     private void OnProxyChanged(object sender, RoutedEventArgs e)
@@ -321,6 +402,8 @@ public sealed partial class MainPage : Page
     private void OnSettingsToggle(object sender, RoutedEventArgs e)
     {
         var open = SettingsButton.IsChecked == true;
+        if (!open)
+            CancelHotkeyRecording(restore: true);
         SettingsScroller.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
         if (AppServices.Current.MainWindow is MainWindow win)
             win.SetContentHeight(open);
@@ -328,47 +411,140 @@ public sealed partial class MainPage : Page
 
     private void OnAutostartToggled(object sender, RoutedEventArgs e) => PersistSettings();
     private void OnCompareOverlayToggled(object sender, RoutedEventArgs e) => PersistSettings();
-    private void OnHotkeyCommit(object sender, RoutedEventArgs e) => PersistSettings();
+    private static void SetHotkeyButton(Button button, string? combo)
+        => button.Content = string.IsNullOrWhiteSpace(combo) ? HotkeyEmptyLabel : combo;
 
-    /// <summary>
-    /// Capture a real key chord (F4, Alt+M, …) instead of typing characters into the box.
-    /// </summary>
-    private void OnHotkeyPreviewKeyDown(object sender, KeyRoutedEventArgs e)
+    private static string? ReadHotkeyButton(Button button)
     {
-        if (sender is not TextBox box) return;
-        e.Handled = true;
+        var text = button.Content?.ToString()?.Trim();
+        if (string.IsNullOrEmpty(text) || text is HotkeyEmptyLabel or HotkeyRecordingLabel)
+            return null;
+        return HotkeyParser.Canonicalize(text) ?? text;
+    }
 
-        var key = e.Key;
-        if (key is VirtualKey.Control or VirtualKey.LeftControl or VirtualKey.RightControl
-            or VirtualKey.Shift or VirtualKey.LeftShift or VirtualKey.RightShift
-            or VirtualKey.Menu or VirtualKey.LeftMenu or VirtualKey.RightMenu
-            or VirtualKey.LeftWindows or VirtualKey.RightWindows)
-            return;
-
-        if (key is VirtualKey.Back or VirtualKey.Delete)
+    private void OnHotkeyRecordClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn) return;
+        if (_hotkeyRecordingButton == btn)
         {
-            box.Text = "";
-            PersistSettings();
+            CancelHotkeyRecording(restore: true);
             return;
         }
 
-        if (key == VirtualKey.Escape)
-            return;
+        CancelHotkeyRecording(restore: true);
+        _hotkeyRecordingButton = btn;
+        _hotkeyRecordingPrevious = ReadHotkeyButton(btn);
+        btn.Content = HotkeyRecordingLabel;
+        btn.Focus(FocusState.Programmatic);
+        StatusText.Text = "请按下快捷键（Esc 取消，Backspace 清空）";
 
-        static bool IsDown(VirtualKey vk)
-            => InputKeyboardSource.GetKeyStateForCurrentThread(vk).HasFlag(CoreVirtualKeyStates.Down);
-
-        var combo = HotkeyParser.FormatCapture(
-            ctrl: IsDown(VirtualKey.Control),
-            alt: IsDown(VirtualKey.Menu),
-            shift: IsDown(VirtualKey.Shift),
-            win: IsDown(VirtualKey.LeftWindows) || IsDown(VirtualKey.RightWindows),
-            virtualKey: (uint)key);
-
-        if (combo is null) return;
-        box.Text = combo;
-        PersistSettings();
+        // Global RegisterHotKey would swallow the chord (e.g. F4) before the UI
+        // sees it — drop hooks while recording, then restore via PersistSettings.
+        _services.SuspendHotkeys();
+        _hotkeyPollSeen.Clear();
+        // Ignore keys already down at click time; wait for a fresh press.
+        for (var vk = 0x08; vk <= 0x87; vk++)
+        {
+            if ((GetAsyncKeyState(vk) & 0x8000) != 0)
+                _hotkeyPollSeen.Add(vk);
+        }
+        _hotkeyPollTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(32) };
+        _hotkeyPollTimer.Tick -= OnHotkeyPollTick;
+        _hotkeyPollTimer.Tick += OnHotkeyPollTick;
+        _hotkeyPollTimer.Start();
     }
+
+    private void CancelHotkeyRecording(bool restore)
+    {
+        StopHotkeyPoll();
+        if (_hotkeyRecordingButton is null) return;
+        if (restore)
+            SetHotkeyButton(_hotkeyRecordingButton, _hotkeyRecordingPrevious);
+        _hotkeyRecordingButton = null;
+        _hotkeyRecordingPrevious = null;
+        // Re-arm whatever is already saved.
+        _services.ReregisterHotkeys(_settings);
+    }
+
+    private void StopHotkeyPoll()
+    {
+        if (_hotkeyPollTimer is null) return;
+        _hotkeyPollTimer.Stop();
+        _hotkeyPollTimer.Tick -= OnHotkeyPollTick;
+        _hotkeyPollSeen.Clear();
+    }
+
+    private void OnHotkeyPollTick(object? sender, object e)
+    {
+        if (_hotkeyRecordingButton is null)
+        {
+            StopHotkeyPoll();
+            return;
+        }
+
+        static bool Down(int vk) => (GetAsyncKeyState(vk) & 0x8000) != 0;
+
+        // Edge-trigger: only act on keys newly pressed since recording started.
+        void Consider(int vk)
+        {
+            var down = Down(vk);
+            if (!down)
+            {
+                _hotkeyPollSeen.Remove(vk);
+                return;
+            }
+            if (!_hotkeyPollSeen.Add(vk)) return;
+
+            if (vk is 0x10 or 0x11 or 0x12 or 0x5B or 0x5C) return; // modifiers alone
+
+            if (vk == 0x1B) // Esc
+            {
+                CancelHotkeyRecording(restore: true);
+                StatusText.Text = "";
+                return;
+            }
+
+            if (vk is 0x08 or 0x2E) // Backspace / Delete
+            {
+                var btn = _hotkeyRecordingButton!;
+                StopHotkeyPoll();
+                SetHotkeyButton(btn, null);
+                _hotkeyRecordingButton = null;
+                _hotkeyRecordingPrevious = null;
+                PersistSettings();
+                StatusText.Text = "已清空热键";
+                return;
+            }
+
+            var combo = HotkeyParser.FormatCapture(
+                ctrl: Down(0x11),
+                alt: Down(0x12),
+                shift: Down(0x10),
+                win: Down(0x5B) || Down(0x5C),
+                virtualKey: (uint)vk);
+            if (combo is null) return;
+
+            var target = _hotkeyRecordingButton!;
+            StopHotkeyPoll();
+            SetHotkeyButton(target, combo);
+            _hotkeyRecordingButton = null;
+            _hotkeyRecordingPrevious = null;
+            PersistSettings();
+            StatusText.Text = "热键已设为 " + combo;
+        }
+
+        // Function keys first — the usual screenshot chords.
+        for (var vk = 0x70; vk <= 0x87; vk++) Consider(vk);
+        // Letters / digits / numpad / common keys.
+        for (var vk = 0x30; vk <= 0x39; vk++) Consider(vk);
+        for (var vk = 0x41; vk <= 0x5A; vk++) Consider(vk);
+        for (var vk = 0x60; vk <= 0x6F; vk++) Consider(vk);
+        foreach (var vk in (int[])[0x20, 0x09, 0x0D, 0x08, 0x2E, 0x2D, 0x24, 0x23, 0x21, 0x22, 0x25, 0x26, 0x27, 0x28, 0x1B, 0xBB, 0xBD])
+            Consider(vk);
+    }
+
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int vKey);
 
     private void OnAutoUpdateToggled(object sender, RoutedEventArgs e) => PersistSettings();
 
@@ -414,13 +590,12 @@ public sealed partial class MainPage : Page
         {
             var outcome = await _services.Updates.CheckAsync();
             ApplyUpdateOutcome(outcome);
-            StatusText.Text = outcome.Kind is UpdateCheckKind.UpdateAvailable or UpdateCheckKind.Failed
-                ? outcome.Message.Split('\n')[0]
-                : "";
-
-            // One-click: if update found, download + restart immediately (DeskBox-style).
-            if (outcome.Kind == UpdateCheckKind.UpdateAvailable)
-                await DownloadAndRestartAsync();
+            StatusText.Text = outcome.Kind switch
+            {
+                UpdateCheckKind.UpdateAvailable => $"发现新版本 v{outcome.RemoteVersion}，点击「立即更新并重启」安装",
+                UpdateCheckKind.Failed => outcome.Message.Split('\n')[0],
+                _ => "已是最新版本",
+            };
         }
         finally
         {
@@ -430,7 +605,20 @@ public sealed partial class MainPage : Page
     }
 
     private async void OnApplyUpdateClick(object sender, RoutedEventArgs e)
-        => await DownloadAndRestartAsync();
+    {
+        var confirm = new ContentDialog
+        {
+            Title = "安装更新",
+            Content = "将下载并安装新版本，完成后 Glance 会自动重启。是否继续？",
+            PrimaryButtonText = "更新并重启",
+            CloseButtonText = "取消",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = XamlRoot,
+        };
+        if (await confirm.ShowAsync() != ContentDialogResult.Primary)
+            return;
+        await DownloadAndRestartAsync();
+    }
 
     private async Task DownloadAndRestartAsync()
     {

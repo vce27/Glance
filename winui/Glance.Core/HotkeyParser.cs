@@ -81,11 +81,29 @@ public static class HotkeyParser
         return string.Join('+', parts);
     }
 
+    /// <summary>Normalize stored values like "f4" → "F4". Returns null if empty/invalid.</summary>
+    public static string? Canonicalize(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        if (!TryParse(raw, out var spec)) return raw.Trim();
+        var ctrl = (spec.Modifiers & HotkeySpec.ModControl) != 0;
+        var alt = (spec.Modifiers & HotkeySpec.ModAlt) != 0;
+        var shift = (spec.Modifiers & HotkeySpec.ModShift) != 0;
+        var win = (spec.Modifiers & HotkeySpec.ModWin) != 0;
+        return FormatCapture(ctrl, alt, shift, win, spec.VirtualKey) ?? raw.Trim();
+    }
+
     private static string? FormatKey(uint vk) => vk switch
     {
         >= 0x70 and <= 0x87 => "F" + (vk - 0x70 + 1), // F1–F24
         >= 0x41 and <= 0x5A => ((char)vk).ToString(), // A–Z
         >= 0x30 and <= 0x39 => ((char)vk).ToString(), // 0–9
+        >= 0x60 and <= 0x69 => "Num" + (vk - 0x60), // numpad 0–9
+        0x6A => "NumMultiply",
+        0x6B => "NumAdd",
+        0x6D => "NumSubtract",
+        0x6E => "NumDecimal",
+        0x6F => "NumDivide",
         0x20 => "Space",
         0x09 => "Tab",
         0x0D => "Enter",
@@ -137,6 +155,10 @@ public static class HotkeyParser
             "RIGHT" or "ARROWRIGHT" => 0x27,
             "PLUS" or "=" => 0xBB,
             "MINUS" or "-" => 0xBD,
+            "NUM0" => 0x60, "NUM1" => 0x61, "NUM2" => 0x62, "NUM3" => 0x63, "NUM4" => 0x64,
+            "NUM5" => 0x65, "NUM6" => 0x66, "NUM7" => 0x67, "NUM8" => 0x68, "NUM9" => 0x69,
+            "NUMMULTIPLY" => 0x6A, "NUMADD" => 0x6B, "NUMSUBTRACT" => 0x6D,
+            "NUMDECIMAL" => 0x6E, "NUMDIVIDE" => 0x6F,
             _ => null,
         };
     }

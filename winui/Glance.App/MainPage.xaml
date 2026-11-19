@@ -222,27 +222,36 @@
                             Visibility="Collapsed" />
                     </StackPanel>
 
-                    <TextBox
-                        x:Name="HotkeyBox"
-                        Header="截屏翻译热键"
-                        IsReadOnly="True"
-                        PlaceholderText="点击后按下快捷键"
-                        PreviewKeyDown="OnHotkeyPreviewKeyDown"
-                        LostFocus="OnHotkeyCommit" />
-                    <TextBox
-                        x:Name="CopyHotkeyBox"
-                        Header="OCR 复制热键"
-                        IsReadOnly="True"
-                        PlaceholderText="点击后按下快捷键"
-                        PreviewKeyDown="OnHotkeyPreviewKeyDown"
-                        LostFocus="OnHotkeyCommit" />
-                    <TextBox
-                        x:Name="PopupHotkeyBox"
-                        Header="弹出主窗热键（可空）"
-                        IsReadOnly="True"
-                        PlaceholderText="点击后按下快捷键，Backspace 清空"
-                        PreviewKeyDown="OnHotkeyPreviewKeyDown"
-                        LostFocus="OnHotkeyCommit" />
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="截屏翻译热键" Opacity="0.8" />
+                        <Button
+                            x:Name="HotkeyButton"
+                            AutomationProperties.AutomationId="HotkeyButton"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
+                            Click="OnHotkeyRecordClick"
+                            ToolTipService.ToolTip="点击后按下快捷键；Backspace 清空" />
+                    </StackPanel>
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="OCR 复制热键" Opacity="0.8" />
+                        <Button
+                            x:Name="CopyHotkeyButton"
+                            AutomationProperties.AutomationId="CopyHotkeyButton"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
+                            Click="OnHotkeyRecordClick"
+                            ToolTipService.ToolTip="点击后按下快捷键；Backspace 清空" />
+                    </StackPanel>
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="弹出主窗热键（可空）" Opacity="0.8" />
+                        <Button
+                            x:Name="PopupHotkeyButton"
+                            AutomationProperties.AutomationId="PopupHotkeyButton"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
+                            Click="OnHotkeyRecordClick"
+                            ToolTipService.ToolTip="点击后按下快捷键；Backspace 清空；Esc 取消" />
+                    </StackPanel>
                 </StackPanel>
             </Border>
         </ScrollViewer>
