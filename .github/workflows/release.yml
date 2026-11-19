@@ -74,6 +74,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path artifacts/velopack | Out-Null
           $notes = Join-Path $env:RUNNER_TEMP 'RELEASE_NOTES.md'
+          $icon = 'winui/Glance.App/Assets/AppIcon.ico'
           vpk pack `
             --packId Glance `
             --packVersion ${{ steps.ver.outputs.version }} `
@@ -81,9 +82,18 @@ jobs:
             --mainExe Glance.exe `
             --packTitle Glance `
             --packAuthors vce27 `
+            --icon $icon `
             --releaseNotes $notes `
             --outputDir artifacts/velopack `
-            --runtime win-x64
+            --runtime win-x64 `
+            --msi `
+            --instLocation Either `
+            --instWelcome packaging/installer/welcome.md `
+            --instReadme packaging/installer/readme.md `
+            --instLicense packaging/installer/license.md `
+            --instConclusion packaging/installer/conclusion.md
+
+          Get-ChildItem artifacts/velopack | Format-Table Name, Length
 
       - name: Package portable ZIP
         shell: pwsh
@@ -95,7 +105,7 @@ jobs:
           Glance Windows 便携版（WinUI）
 
           无需安装，解压后运行 Glance.exe。
-          便携版不支持应用内自动更新；请使用 Release 中的 Setup 安装包以启用 Velopack 更新。
+          便携版不支持应用内自动更新；请使用 Release 中的 MSI / Setup 安装包以启用 Velopack 更新。
           需要 Windows 10 1809+ / Windows 11。
           '@ | Set-Content -Encoding utf8 (Join-Path $out 'README.txt')
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
@@ -107,6 +117,9 @@ jobs:
           $ver = '${{ steps.ver.outputs.version }}'
           New-Item -ItemType Directory -Force -Path artifacts/release | Out-Null
           Copy-Item 'artifacts/velopack/Glance-win-Setup.exe' 'artifacts/release/' -Force
+          $msi = Get-ChildItem 'artifacts/velopack/*.msi' -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $msi) { throw 'Velopack MSI was not produced (expected *.msi under artifacts/velopack).' }
+          Copy-Item $msi.FullName 'artifacts/release/Glance-win.msi' -Force
           Copy-Item 'artifacts/Glance-windows-x64-portable.zip' 'artifacts/release/' -Force
           Copy-Item "artifacts/velopack/Glance-$ver-full.nupkg" 'artifacts/release/' -Force
           Copy-Item 'artifacts/velopack/releases.win.json' 'artifacts/release/' -Force
@@ -135,7 +148,8 @@ jobs:
           {
             echo "## 下载"
             echo ""
-            echo "- **Glance-win-Setup.exe** — 安装版（推荐，支持应用内自动更新）"
+            echo "- **Glance-win.msi** — 推荐：Windows 安装向导（可选当前用户 / 所有用户与安装目录，支持自动更新）"
+            echo "- **Glance-win-Setup.exe** — 一键安装到 \`%LOCALAPPDATA%\\Glance\`（无向导，支持自动更新）"
             echo "- **Glance-windows-x64-portable.zip** — 便携版（解压即用，不支持自动更新）"
             echo ""
             if [ -f "$NOTES" ]; then
@@ -152,6 +166,7 @@ jobs:
           name: Glance v${{ needs.build.outputs.version }}
           body_path: release-body.md
           files: |
+            artifacts/Glance-win.msi
             artifacts/Glance-win-Setup.exe
             artifacts/Glance-windows-x64-portable.zip
             artifacts/*.nupkg

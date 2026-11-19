@@ -15,9 +15,11 @@
     <EnableMsixTooling>true</EnableMsixTooling>
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <!-- Avoid shipping every .NET satellite culture (~tens of MB). -->
+    <SatelliteResourceLanguages>en;zh-Hans</SatelliteResourceLanguages>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>0.0.10</Version>
+    <Version>0.0.11</Version>
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
   </PropertyGroup>
 
@@ -33,7 +35,9 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2705" />
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.4.0" />
+    <!-- Modular WASDK: skip umbrella Microsoft.WindowsAppSDK (pulls AI/ML / ONNX / DirectML). -->
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.6.5" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Runtime" Version="2.6.5" />
     <PackageReference Include="Velopack" Version="1.2.0" />
   </ItemGroup>
 
