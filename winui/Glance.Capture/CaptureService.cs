@@ -156,6 +156,14 @@ public sealed class CaptureService
             finally
             {
                 Interlocked.Exchange(ref _busy, 0);
+                try
+                {
+                    // Overlay uses Cursors.Cross; reset before the STA thread dies
+                    // so the desktop does not keep a stuck/invisible capture cursor.
+                    Cursor.Current = Cursors.Default;
+                    Application.UseWaitCursor = false;
+                }
+                catch { /* ignore */ }
                 try { Application.ExitThread(); } catch { /* ignore */ }
             }
         });

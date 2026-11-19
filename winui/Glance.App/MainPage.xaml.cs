@@ -1,12 +1,16 @@
 using Glance.Capture;
 using Glance.Core;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.Media.Core;
 using Windows.Media.Playback;
 using Windows.Media.SpeechSynthesis;
+using Windows.System;
+using Windows.UI.Core;
 
 namespace Glance.App;
 
@@ -325,6 +329,46 @@ public sealed partial class MainPage : Page
     private void OnAutostartToggled(object sender, RoutedEventArgs e) => PersistSettings();
     private void OnCompareOverlayToggled(object sender, RoutedEventArgs e) => PersistSettings();
     private void OnHotkeyCommit(object sender, RoutedEventArgs e) => PersistSettings();
+
+    /// <summary>
+    /// Capture a real key chord (F4, Alt+M, …) instead of typing characters into the box.
+    /// </summary>
+    private void OnHotkeyPreviewKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (sender is not TextBox box) return;
+        e.Handled = true;
+
+        var key = e.Key;
+        if (key is VirtualKey.Control or VirtualKey.LeftControl or VirtualKey.RightControl
+            or VirtualKey.Shift or VirtualKey.LeftShift or VirtualKey.RightShift
+            or VirtualKey.Menu or VirtualKey.LeftMenu or VirtualKey.RightMenu
+            or VirtualKey.LeftWindows or VirtualKey.RightWindows)
+            return;
+
+        if (key is VirtualKey.Back or VirtualKey.Delete)
+        {
+            box.Text = "";
+            PersistSettings();
+            return;
+        }
+
+        if (key == VirtualKey.Escape)
+            return;
+
+        static bool IsDown(VirtualKey vk)
+            => InputKeyboardSource.GetKeyStateForCurrentThread(vk).HasFlag(CoreVirtualKeyStates.Down);
+
+        var combo = HotkeyParser.FormatCapture(
+            ctrl: IsDown(VirtualKey.Control),
+            alt: IsDown(VirtualKey.Menu),
+            shift: IsDown(VirtualKey.Shift),
+            win: IsDown(VirtualKey.LeftWindows) || IsDown(VirtualKey.RightWindows),
+            virtualKey: (uint)key);
+
+        if (combo is null) return;
+        box.Text = combo;
+        PersistSettings();
+    }
 
     private void OnAutoUpdateToggled(object sender, RoutedEventArgs e) => PersistSettings();
 

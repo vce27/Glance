@@ -773,6 +773,8 @@ public sealed class CaptureOverlayForm : Form
     {
         if (kind == CaptureOverlayResultKind.Cancelled)
             Result = new CaptureOverlayResult { Kind = CaptureOverlayResultKind.Cancelled };
+        Cursor = Cursors.Default;
+        Cursor.Current = Cursors.Default;
         DialogResult = kind == CaptureOverlayResultKind.Cancelled ? DialogResult.Cancel : DialogResult.OK;
         Close();
     }

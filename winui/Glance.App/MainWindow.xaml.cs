@@ -1,5 +1,7 @@
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
+using Windows.UI;
 
 namespace Glance.App;
 
@@ -20,6 +22,10 @@ public sealed partial class MainWindow : Window
 
         AppWindow.Resize(new Windows.Graphics.SizeInt32(560, 304));
         RootFrame.Navigate(typeof(MainPage));
+        ApplyCaptionButtonColors(ElementTheme.Light);
+
+        if (Content is FrameworkElement root)
+            root.ActualThemeChanged += (_, _) => ApplyCaptionButtonColors(root.ActualTheme);
 
         AppWindow.Closing += (_, e) =>
         {
@@ -42,6 +48,33 @@ public sealed partial class MainWindow : Window
             root.RequestedTheme = elementTheme;
         if (RootFrame.Content is FrameworkElement page)
             page.RequestedTheme = elementTheme;
+        ApplyCaptionButtonColors(elementTheme);
+    }
+
+    /// <summary>
+    /// WinUI leaves inactive caption glyphs nearly white on light Mica when
+    /// ExtendsContentIntoTitleBar is on — force readable active/inactive colors.
+    /// </summary>
+    private void ApplyCaptionButtonColors(ElementTheme theme)
+    {
+        var titleBar = AppWindow.TitleBar;
+        var dark = theme == ElementTheme.Dark
+            || (theme == ElementTheme.Default && Application.Current.RequestedTheme == ApplicationTheme.Dark);
+
+        // Active / inactive both need contrast; hover keeps a light wash.
+        Color fg = dark ? Color.FromArgb(255, 202, 202, 202) : Color.FromArgb(255, 50, 50, 50);
+        Color fgInactive = dark ? Color.FromArgb(255, 140, 140, 140) : Color.FromArgb(255, 96, 96, 96);
+        Color hoverBg = dark ? Color.FromArgb(40, 255, 255, 255) : Color.FromArgb(30, 0, 0, 0);
+        Color pressBg = dark ? Color.FromArgb(60, 255, 255, 255) : Color.FromArgb(45, 0, 0, 0);
+
+        titleBar.ButtonForegroundColor = fg;
+        titleBar.ButtonInactiveForegroundColor = fgInactive;
+        titleBar.ButtonHoverForegroundColor = fg;
+        titleBar.ButtonPressedForegroundColor = fg;
+        titleBar.ButtonBackgroundColor = Colors.Transparent;
+        titleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
+        titleBar.ButtonHoverBackgroundColor = hoverBg;
+        titleBar.ButtonPressedBackgroundColor = pressBg;
     }
 
     public void SetContentHeight(bool settingsOpen)

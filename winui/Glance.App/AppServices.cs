@@ -36,7 +36,15 @@ public sealed class AppServices
     private Mutex? _singleInstance;
     private EventWaitHandle? _activateEvent;
     private volatile bool _activateStop;
+    // Debug builds use a separate mutex so `dotnet run` / local exe does not
+    // hand focus to the installed Velopack app under %LocalAppData%\Glance.
+#if DEBUG
+    private const string ActivateEventName = @"Local\Glance.WinUI.Activate.Debug";
+    private const string SingleInstanceMutexName = @"Local\Glance.WinUI.SingleInstance.Debug";
+#else
     private const string ActivateEventName = @"Local\Glance.WinUI.Activate";
+    private const string SingleInstanceMutexName = @"Local\Glance.WinUI.SingleInstance";
+#endif
 
     public AppServices()
     {
@@ -48,7 +56,7 @@ public sealed class AppServices
 
     public bool TryTakeSingleInstance()
     {
-        _singleInstance = new Mutex(true, @"Local\Glance.WinUI.SingleInstance", out var created);
+        _singleInstance = new Mutex(true, SingleInstanceMutexName, out var created);
         if (!created) return false;
 
         _activateEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ActivateEventName);
@@ -126,6 +134,9 @@ public sealed class AppServices
     {
         if (MainWindow is null) return;
         var hwnd = WindowNative.GetWindowHandle(MainWindow);
+        // Uncloak before show so the first painted frame is visible.
+        SetWindowCloaked(hwnd, false);
+        try { MainWindow.AppWindow.Show(); } catch { /* older path */ }
         ShowWindow(hwnd, 9); // SW_RESTORE
         SetForegroundWindow(hwnd);
         MainWindow.Activate();
@@ -136,6 +147,10 @@ public sealed class AppServices
     {
         if (MainWindow is null) return;
         var hwnd = WindowNative.GetWindowHandle(MainWindow);
+        // Cloak removes the HWND from DWM composition immediately (Mica can
+        // otherwise linger in CopyFromScreen for a frame or two after SW_HIDE).
+        SetWindowCloaked(hwnd, true);
+        try { MainWindow.AppWindow.Hide(); } catch { /* older path */ }
         ShowWindow(hwnd, 0); // SW_HIDE
         MainWindowShown = false;
     }
@@ -215,7 +230,10 @@ public sealed class AppServices
         }
         catch { /* ignore */ }
 
+        // Drop AlwaysOnTop before hide so a pinned window cannot race above the overlay.
+        if (pinned) ApplyPin(false);
         HideMainWindow();
+        await WaitUntilMainWindowGoneAsync();
         try
         {
             var result = await Capture.RunAsync(mode);
@@ -237,10 +255,10 @@ public sealed class AppServices
         finally
         {
             if (wasShown)
-            {
                 ShowMainWindow();
-                ApplyPin(pinned);
-            }
+            // Restore pin even when the window stayed hidden (hotkey-only capture).
+            if (pinned)
+                ApplyPin(true);
         }
     }
 
@@ -254,9 +272,43 @@ public sealed class AppServices
         Application.Current.Exit();
     }
 
+    /// <summary>
+    /// Wait until the main HWND is no longer visible, then give DWM a short
+    /// settle so Mica composition is gone before CopyFromScreen.
+    /// </summary>
+    private async Task WaitUntilMainWindowGoneAsync()
+    {
+        if (MainWindow is null) return;
+        var hwnd = WindowNative.GetWindowHandle(MainWindow);
+        var deadline = Environment.TickCount64 + 300;
+        while (Environment.TickCount64 < deadline)
+        {
+            if (!IsWindowVisible(hwnd) && !MainWindow.AppWindow.IsVisible)
+                break;
+            await Task.Delay(16);
+        }
+        // One extra composition frame — hide alone is not enough with Mica.
+        await Task.Delay(50);
+    }
+
+    private static void SetWindowCloaked(IntPtr hwnd, bool cloak)
+    {
+        if (hwnd == IntPtr.Zero) return;
+        var value = cloak ? 1 : 0;
+        _ = DwmSetWindowAttribute(hwnd, DwmwaCloak, ref value, sizeof(int));
+    }
+
+    private const int DwmwaCloak = 13;
+
     [DllImport("user32.dll")]
     private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
 }

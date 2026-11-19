@@ -1,5 +1,3 @@
-using System.Runtime.InteropServices;
-
 namespace Glance.Core;
 
 /// <summary>Parses Tauri-style hotkey strings into Win32 modifiers + virtual key.</summary>
@@ -59,6 +57,53 @@ public static class HotkeyParser
         spec = new HotkeySpec(mods, vk.Value, raw);
         return true;
     }
+
+    /// <summary>
+    /// Build a settings string from a captured key + modifiers (e.g. F4, Ctrl+Shift+X).
+    /// Returns null for modifier-only presses or unsupported keys.
+    /// </summary>
+    public static string? FormatCapture(bool ctrl, bool alt, bool shift, bool win, uint virtualKey)
+    {
+        // Modifier-only — wait for the real key.
+        if (virtualKey is 0x10 or 0x11 or 0x12 or 0x5B or 0x5C // Shift/Ctrl/Alt/Win
+            or 0xA0 or 0xA1 or 0xA2 or 0xA3 or 0xA4 or 0xA5) // left/right variants
+            return null;
+
+        var key = FormatKey(virtualKey);
+        if (key is null) return null;
+
+        var parts = new List<string>(4);
+        if (ctrl) parts.Add("Ctrl");
+        if (alt) parts.Add("Alt");
+        if (shift) parts.Add("Shift");
+        if (win) parts.Add("Win");
+        parts.Add(key);
+        return string.Join('+', parts);
+    }
+
+    private static string? FormatKey(uint vk) => vk switch
+    {
+        >= 0x70 and <= 0x87 => "F" + (vk - 0x70 + 1), // F1–F24
+        >= 0x41 and <= 0x5A => ((char)vk).ToString(), // A–Z
+        >= 0x30 and <= 0x39 => ((char)vk).ToString(), // 0–9
+        0x20 => "Space",
+        0x09 => "Tab",
+        0x0D => "Enter",
+        0x08 => "Backspace",
+        0x2E => "Delete",
+        0x2D => "Insert",
+        0x24 => "Home",
+        0x23 => "End",
+        0x21 => "PageUp",
+        0x22 => "PageDown",
+        0x26 => "Up",
+        0x28 => "Down",
+        0x25 => "Left",
+        0x27 => "Right",
+        0xBB => "Plus",
+        0xBD => "Minus",
+        _ => null,
+    };
 
     private static uint? ResolveKey(string key)
     {

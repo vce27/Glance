@@ -222,9 +222,27 @@
                             Visibility="Collapsed" />
                     </StackPanel>
 
-                    <TextBox x:Name="HotkeyBox" Header="截屏翻译热键" LostFocus="OnHotkeyCommit" />
-                    <TextBox x:Name="CopyHotkeyBox" Header="OCR 复制热键" LostFocus="OnHotkeyCommit" />
-                    <TextBox x:Name="PopupHotkeyBox" Header="弹出主窗热键（可空）" LostFocus="OnHotkeyCommit" />
+                    <TextBox
+                        x:Name="HotkeyBox"
+                        Header="截屏翻译热键"
+                        IsReadOnly="True"
+                        PlaceholderText="点击后按下快捷键"
+                        PreviewKeyDown="OnHotkeyPreviewKeyDown"
+                        LostFocus="OnHotkeyCommit" />
+                    <TextBox
+                        x:Name="CopyHotkeyBox"
+                        Header="OCR 复制热键"
+                        IsReadOnly="True"
+                        PlaceholderText="点击后按下快捷键"
+                        PreviewKeyDown="OnHotkeyPreviewKeyDown"
+                        LostFocus="OnHotkeyCommit" />
+                    <TextBox
+                        x:Name="PopupHotkeyBox"
+                        Header="弹出主窗热键（可空）"
+                        IsReadOnly="True"
+                        PlaceholderText="点击后按下快捷键，Backspace 清空"
+                        PreviewKeyDown="OnHotkeyPreviewKeyDown"
+                        LostFocus="OnHotkeyCommit" />
                 </StackPanel>
             </Border>
         </ScrollViewer>
