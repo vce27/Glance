@@ -53,7 +53,9 @@
                 Padding="6"
                 Click="OnPinClick"
                 Style="{StaticResource GlanceToolbarToggleStyle}"
-                ToolTipService.ToolTip="置顶窗口" />
+                ToolTipService.ToolTip="置顶窗口">
+                <FontIcon FontFamily="Segoe Fluent Icons" FontSize="16" Glyph="&#xE840;" />
+            </ToggleButton>
             <Button
                 x:Name="CaptureButton"
                 Grid.Column="4"
@@ -61,7 +63,9 @@
                 Padding="6"
                 Click="OnCaptureClick"
                 Style="{StaticResource GlanceToolbarButtonStyle}"
-                ToolTipService.ToolTip="截屏翻译" />
+                ToolTipService.ToolTip="截屏翻译">
+                <FontIcon FontFamily="Segoe Fluent Icons" FontSize="16" Glyph="&#xE7A8;" />
+            </Button>
             <Button
                 x:Name="ThemeButton"
                 Grid.Column="5"
@@ -148,11 +152,18 @@
                     <TextBlock FontWeight="SemiBold" Text="设置" />
 
                     <TextBlock Text="文本引擎" />
-                    <VariableSizedWrapGrid
-                        x:Name="EngineList"
-                        ItemHeight="40"
-                        ItemWidth="88"
-                        Orientation="Horizontal" />
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <RadioButton
+                            x:Name="EngineBing"
+                            Content="必应"
+                            GroupName="Engine"
+                            Checked="OnEngineChanged" />
+                        <RadioButton
+                            x:Name="EngineLlm"
+                            Content="AI 大模型"
+                            GroupName="Engine"
+                            Checked="OnEngineChanged" />
+                    </StackPanel>
 
                     <TextBlock Text="代理" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
@@ -172,12 +183,6 @@
                         <TextBox x:Name="LlmModelBox" Header="Model" LostFocus="OnSettingsFieldCommit" />
                     </StackPanel>
 
-                    <ToggleSwitch
-                        x:Name="ThemeSwitch"
-                        Header="深色主题"
-                        OffContent="浅色"
-                        OnContent="深色"
-                        Toggled="OnThemeSwitchToggled" />
                     <ToggleSwitch
                         x:Name="AutostartSwitch"
                         Header="开机自启"

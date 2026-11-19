@@ -61,7 +61,6 @@ winui/
   Glance.App/       WinUI shell (Mica, tray, hotkeys, main UI, Velopack)
   Glance.Core/      settings JSON, Youdao, Bing, proxy, LLM
   Glance.Capture/   BitBlt + selection overlay
-legacy-tauri/       archived Tauri 2 + WebView sources
 ```
 
 ## Updates (Velopack)
@@ -76,7 +75,3 @@ Update feed defaults to `https://github.com/vce27/Glance` Releases. Override loc
 ## Hotkeys
 
 Configured in settings (Tauri-style strings still accepted), e.g. `F4`, `Alt+M`, `CommandOrControl+Shift+X`.
-
-## Legacy
-
-The previous Tauri implementation lives under `legacy-tauri/` for reference. Windows development continues on this WinUI tree.

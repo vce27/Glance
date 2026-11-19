@@ -8,13 +8,8 @@ namespace Glance.Core;
 public sealed class YoudaoClient
 {
     private const string ImageTranslateSecret = "VPaHE3kX_vl4BhgYiu2n";
-    private const string DefaultClientele = "deskdict";
-    private HttpClient? _http;
-    private string _proxyKey = "\0";
-
-    public YoudaoClient()
-    {
-    }
+    private const string Clientele = "deskdict";
+    private readonly ProxiedHttp _http = new();
 
     public async Task<TranslationResponse> TranslateImageAsync(
         byte[] bytes,
@@ -25,16 +20,14 @@ public sealed class YoudaoClient
         TranslatorSettings settings,
         CancellationToken ct = default)
     {
-        var clientele = string.IsNullOrWhiteSpace(settings.Clientele) ? DefaultClientele : settings.Clientele;
         var salt = RandomSalt();
-        var sign = BuildUploadSign(clientele, bytes, salt);
-        var http = ClientFor(settings);
+        var sign = BuildUploadSign(Clientele, bytes, salt);
 
         using var form = new MultipartFormDataContent();
         var fileContent = new ByteArrayContent(bytes);
         fileContent.Headers.ContentType = new MediaTypeHeaderValue(mimeType);
         form.Add(fileContent, "multipartFile", fileName);
-        form.Add(new StringContent(clientele), "clientele");
+        form.Add(new StringContent(Clientele), "clientele");
         form.Add(new StringContent(salt), "salt");
         form.Add(new StringContent(sign), "sign");
         form.Add(new StringContent(fromLang), "from");
@@ -43,25 +36,13 @@ public sealed class YoudaoClient
         form.Add(new StringContent("true"), "isSyncSaveHistory");
         form.Add(new StringContent("photo_translate"), "funDesc");
 
-        using var resp = await http.PostAsync("https://ocrtran.youdao.com/ocr/imgtranocr", form, ct);
+        using var resp = await _http.Get(settings).PostAsync("https://ocrtran.youdao.com/ocr/imgtranocr", form, ct);
         resp.EnsureSuccessStatusCode();
         var json = await resp.Content.ReadAsStringAsync(ct);
         var payload = JsonSerializer.Deserialize<RawTranslationResponse>(json, ConfigStore.JsonOptions)
             ?? throw new InvalidOperationException("empty youdao response");
 
         return payload.ToResponse();
-    }
-
-    private HttpClient ClientFor(TranslatorSettings settings)
-    {
-        var key = ProxyResolver.Resolve(settings) ?? "";
-        if (_http is not null && _proxyKey == key)
-            return _http;
-
-        _http?.Dispose();
-        _http = new HttpClient(ProxyResolver.CreateHandler(settings));
-        _proxyKey = key;
-        return _http;
     }
 
     internal static string BuildUploadSign(string clientele, byte[] bytes, string salt)
@@ -91,9 +72,6 @@ public sealed class YoudaoClient
     {
         public string ErrorCode { get; set; } = "";
         public string Image { get; set; } = "";
-        public string LanFrom { get; set; } = "";
-        public string LanTo { get; set; } = "";
-        public string RequestId { get; set; } = "";
         public List<RawRegion> ResRegions { get; set; } = [];
 
         public TranslationResponse ToResponse()
@@ -113,9 +91,6 @@ public sealed class YoudaoClient
 
             return new TranslationResponse
             {
-                RequestId = RequestId,
-                LanFrom = LanFrom,
-                LanTo = LanTo,
                 RenderedImageBase64 = Image,
                 Pairs = pairs,
             };

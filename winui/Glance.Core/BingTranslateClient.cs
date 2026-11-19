@@ -9,28 +9,23 @@ public sealed class BingTranslateClient
     private const string CnHost = "https://cn.bing.com";
     private const string WwwHost = "https://www.bing.com";
 
-    private HttpClient? _http;
+    private readonly ProxiedHttp _http = new();
     private string _proxyKey = "\0";
     private BingToken? _token;
     private readonly SemaphoreSlim _lock = new(1, 1);
 
-    public BingTranslateClient()
-    {
-    }
-
     private HttpClient ClientFor(TranslatorSettings settings)
     {
         var key = ProxyResolver.Resolve(settings) ?? "";
-        if (_http is not null && _proxyKey == key)
-            return _http;
+        if (_proxyKey != key)
+        {
+            _token = null;
+            _proxyKey = key;
+        }
 
-        _http?.Dispose();
-        _http = new HttpClient(ProxyResolver.CreateHandler(settings, allowAutoRedirect: false));
-        _http.DefaultRequestHeaders.UserAgent.ParseAdd(
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-        _proxyKey = key;
-        _token = null;
-        return _http;
+        return _http.Get(settings, allowAutoRedirect: false, http =>
+            http.DefaultRequestHeaders.UserAgent.ParseAdd(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"));
     }
 
     public async Task<TextTranslationResult> TranslateAsync(
@@ -85,7 +80,6 @@ public sealed class BingTranslateClient
             throw new InvalidOperationException("Bing translate auth failed");
 
         var translated = "";
-        var detected = from;
         if (root.ValueKind == JsonValueKind.Array && root.GetArrayLength() > 0)
         {
             var first = root[0];
@@ -93,19 +87,12 @@ public sealed class BingTranslateClient
                 translations.GetArrayLength() > 0 &&
                 translations[0].TryGetProperty("text", out var t))
                 translated = t.GetString() ?? "";
-            if (first.TryGetProperty("detectedLanguage", out var dl) &&
-                dl.TryGetProperty("language", out var lang))
-                detected = lang.GetString() ?? from;
         }
 
         if (string.IsNullOrEmpty(translated))
             throw new InvalidOperationException("Bing translate returned empty result");
 
-        return new TextTranslationResult
-        {
-            TranslatedText = translated,
-            FromLangDetected = NormalizeLang(detected),
-        };
+        return new TextTranslationResult { TranslatedText = translated };
     }
 
     private async Task<BingToken> GetOrRefreshTokenAsync(HttpClient http, CancellationToken ct, string? preferHost = null)
@@ -189,14 +176,6 @@ public sealed class BingTranslateClient
         "zh-CHT" => "zh-Hant",
         "auto" => "auto-detect",
         _ => code,
-    };
-
-    private static string NormalizeLang(string code) => code switch
-    {
-        "zh-Hans" => "zh-CHS",
-        "zh-Hant" => "zh-CHT",
-        "auto-detect" => "auto",
-        _ => code.ToLowerInvariant(),
     };
 
     private sealed record BingToken(string Value, string Key, string Ig, string Iid, string Host);

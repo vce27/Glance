@@ -79,6 +79,7 @@ public sealed class CaptureOverlayForm : Form
     private bool _copyDone;
 
     /// <summary>When true: original in selection + translation card. When false: translation fills selection.</summary>
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public bool ShowCompareOverlay
     {
         get => _showCompare;

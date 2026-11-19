@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
 namespace Glance.Core;
@@ -38,7 +39,19 @@ public sealed class ConfigStore
     {
         Ensure();
         var json = File.ReadAllText(_settingsFile);
-        return JsonSerializer.Deserialize<TranslatorSettings>(json, JsonOptions) ?? new TranslatorSettings();
+        try
+        {
+            return JsonSerializer.Deserialize<TranslatorSettings>(json, JsonOptions) ?? new TranslatorSettings();
+        }
+        catch (JsonException)
+        {
+            // Old builds stored removed engines (google/microsoft/…). Coerce to Bing and retry.
+            var node = JsonNode.Parse(json);
+            if (node is JsonObject obj)
+                obj["textTranslateEngine"] = "bing";
+            return JsonSerializer.Deserialize<TranslatorSettings>(node?.ToJsonString() ?? "{}", JsonOptions)
+                   ?? new TranslatorSettings();
+        }
     }
 
     public void SaveSettings(TranslatorSettings settings)

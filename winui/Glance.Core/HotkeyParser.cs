@@ -23,15 +23,15 @@ public static class HotkeyParser
         foreach (var part in raw.Split('+', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
         {
             var p = part.Trim();
-            if (p.Equals("CommandOrControl", StringComparison.OrdinalIgnoreCase) ||
+            // CommandOrControl / CmdOrCtrl kept so older settings.json still parse.
+            if (p.Equals("Ctrl", StringComparison.OrdinalIgnoreCase) ||
                 p.Equals("Control", StringComparison.OrdinalIgnoreCase) ||
-                p.Equals("Ctrl", StringComparison.OrdinalIgnoreCase) ||
+                p.Equals("CommandOrControl", StringComparison.OrdinalIgnoreCase) ||
                 p.Equals("CmdOrCtrl", StringComparison.OrdinalIgnoreCase))
             {
                 mods |= HotkeySpec.ModControl;
             }
-            else if (p.Equals("Alt", StringComparison.OrdinalIgnoreCase) ||
-                     p.Equals("Option", StringComparison.OrdinalIgnoreCase))
+            else if (p.Equals("Alt", StringComparison.OrdinalIgnoreCase))
             {
                 mods |= HotkeySpec.ModAlt;
             }
@@ -39,9 +39,7 @@ public static class HotkeyParser
             {
                 mods |= HotkeySpec.ModShift;
             }
-            else if (p.Equals("Super", StringComparison.OrdinalIgnoreCase) ||
-                     p.Equals("Meta", StringComparison.OrdinalIgnoreCase) ||
-                     p.Equals("Win", StringComparison.OrdinalIgnoreCase) ||
+            else if (p.Equals("Win", StringComparison.OrdinalIgnoreCase) ||
                      p.Equals("Windows", StringComparison.OrdinalIgnoreCase))
             {
                 mods |= HotkeySpec.ModWin;

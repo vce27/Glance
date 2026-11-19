@@ -3,7 +3,6 @@ namespace Glance.Core;
 public sealed class TextTranslator
 {
     private readonly BingTranslateClient _bing = new();
-    private readonly BuiltinTranslateClient _builtin = new();
     private readonly LlmTranslateClient _llm = new();
 
     public Task<TextTranslationResult> TranslateAsync(
@@ -12,18 +11,7 @@ public sealed class TextTranslator
         string to,
         TranslatorSettings settings,
         CancellationToken ct = default)
-    {
-        var proxy = ProxyResolver.Resolve(settings);
-        return settings.TextTranslateEngine switch
-        {
-            TextTranslateEngine.Bing => _bing.TranslateAsync(text, from, to, settings, ct),
-            TextTranslateEngine.Google => _builtin.GoogleAsync(text, from, to, proxy, ct),
-            TextTranslateEngine.Microsoft => _builtin.MicrosoftAsync(text, from, to, proxy, ct),
-            TextTranslateEngine.Transmart => _builtin.TransmartAsync(text, from, to, proxy, ct),
-            TextTranslateEngine.Yandex => _builtin.YandexAsync(text, from, to, proxy, ct),
-            TextTranslateEngine.Iciba => _builtin.IcibaAsync(text, from, to, proxy, ct),
-            TextTranslateEngine.Llm => _llm.TranslateAsync(text, from, to, settings, ct),
-            _ => _bing.TranslateAsync(text, from, to, settings, ct),
-        };
-    }
+        => settings.TextTranslateEngine == TextTranslateEngine.Llm
+            ? _llm.TranslateAsync(text, from, to, settings, ct)
+            : _bing.TranslateAsync(text, from, to, settings, ct);
 }

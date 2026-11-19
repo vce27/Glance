@@ -27,17 +27,6 @@ public sealed partial class MainPage : Page
         ("es", "西班牙语"),
     ];
 
-    private static readonly (TextTranslateEngine Engine, string Label)[] Engines =
-    [
-        (TextTranslateEngine.Bing, "必应"),
-        (TextTranslateEngine.Google, "Google"),
-        (TextTranslateEngine.Microsoft, "微软"),
-        (TextTranslateEngine.Transmart, "腾讯"),
-        (TextTranslateEngine.Yandex, "Yandex"),
-        (TextTranslateEngine.Iciba, "词霸"),
-        (TextTranslateEngine.Llm, "AI 大模型"),
-    ];
-
     private static readonly Dictionary<string, string> TtsLangMap = new()
     {
         ["zh-CHS"] = "zh-CN",
@@ -52,6 +41,12 @@ public sealed partial class MainPage : Page
         ["ru"] = "ru-RU",
         ["es"] = "es-ES",
     };
+
+    private static readonly FontFamily FluentIcons = new("Segoe Fluent Icons");
+    private const string GlyphVolume = "\uE767";
+    private const string GlyphStop = "\uE71A";
+    private const string GlyphSun = "\uE706";
+    private const string GlyphMoon = "\uE708";
 
     private readonly AppServices _services;
     private readonly SpeechSynthesizer _synth = new();
@@ -73,15 +68,6 @@ public sealed partial class MainPage : Page
     {
         _services = AppServices.Current;
         InitializeComponent();
-
-        var pinIcon = LucideStrokeIcon.Create(LucideStrokeIcon.PinData);
-        PinButton.Content = pinIcon;
-        LucideStrokeIcon.BindToControlForeground(PinButton, pinIcon);
-
-        var captureIcon = LucideStrokeIcon.Create(LucideStrokeIcon.ScanTextData);
-        CaptureButton.Content = captureIcon;
-        LucideStrokeIcon.BindToControlForeground(CaptureButton, captureIcon);
-
         ApplyTtsIcon(InputTtsButton, playing: false);
         ApplyTtsIcon(OutputTtsButton, playing: false);
 
@@ -101,28 +87,12 @@ public sealed partial class MainPage : Page
             ToLangBox.Items.Add(new ComboBoxItem { Content = label, Tag = value });
         }
 
-        foreach (var (engine, label) in Engines)
-        {
-            var btn = new Button
-            {
-                Content = label,
-                Tag = engine,
-                Margin = new Thickness(0, 0, 8, 8),
-                MinWidth = 72,
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-            };
-            btn.Click += OnEngineButtonClick;
-            EngineList.Children.Add(btn);
-        }
-
         _settings = _services.Store.LoadSettings();
         SelectLang(FromLangBox, _settings.FromLang);
         SelectLang(ToLangBox, _settings.ToLang);
         PinButton.IsChecked = _settings.PinOnTop;
         AutostartSwitch.IsOn = _settings.Autostart;
         CompareOverlaySwitch.IsOn = _settings.ShowCompareOverlay;
-        var dark = string.Equals(_settings.UiTheme, "dark", StringComparison.OrdinalIgnoreCase);
-        ThemeSwitch.IsOn = dark;
         AutoUpdateSwitch.IsOn = _settings.AutoCheckUpdates;
         SetHotkeyButton(HotkeyButton, HotkeyParser.Canonicalize(_settings.Hotkey));
         SetHotkeyButton(CopyHotkeyButton, HotkeyParser.Canonicalize(_settings.CopyHotkey));
@@ -133,10 +103,12 @@ public sealed partial class MainPage : Page
         LlmModelBox.Text = _settings.LlmConfig.Model;
         ApplyProxyUi();
         UpdateThemeButtonGlyph();
-        HighlightEngine();
+        if (_settings.TextTranslateEngine == TextTranslateEngine.Llm)
+            EngineLlm.IsChecked = true;
+        else
+            EngineBing.IsChecked = true;
         UpdateEngineDependentUi();
         _services.ApplyPin(_settings.PinOnTop);
-        _services.CancelUiTransientState = () => CancelHotkeyRecording(restore: true);
         _services.StatusChanged += msg => DispatcherQueue.TryEnqueue(() => StatusText.Text = msg);
         _services.CaptureCompleted += result => DispatcherQueue.TryEnqueue(() => ApplyCaptureResult(result));
         _services.Capture.ComparePreferenceChanged += show => DispatcherQueue.TryEnqueue(() =>
@@ -155,13 +127,6 @@ public sealed partial class MainPage : Page
             _ = AutoCheckUpdatesAsync();
     }
 
-    private static readonly SolidColorBrush AccentBrush = new(Windows.UI.Color.FromArgb(0xFF, 0x00, 0x78, 0xD4));
-    private static readonly SolidColorBrush WhiteBrush = new(Microsoft.UI.Colors.White);
-    private static readonly SolidColorBrush TransparentBrush = new(Microsoft.UI.Colors.Transparent);
-    private static readonly FontFamily FluentIcons = new("Segoe Fluent Icons");
-    private FontIcon? _themeSunIcon;
-    private FontIcon? _themeMoonIcon;
-
     private void ApplyProxyUi()
     {
         switch (_settings.ProxyMode)
@@ -179,32 +144,12 @@ public sealed partial class MainPage : Page
         CustomProxyBox.Visibility = _settings.ProxyMode == ProxyMode.Custom ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private void HighlightEngine()
+    private void OnEngineChanged(object sender, RoutedEventArgs e)
     {
-        foreach (var item in EngineList.Children)
-        {
-            if (item is not Button btn || btn.Tag is not TextTranslateEngine eng) continue;
-            var selected = eng == _settings.TextTranslateEngine;
-            btn.BorderBrush = AccentBrush;
-            btn.BorderThickness = new Thickness(1);
-            if (selected)
-            {
-                btn.Background = AccentBrush;
-                btn.Foreground = WhiteBrush;
-            }
-            else
-            {
-                btn.Background = TransparentBrush;
-                btn.Foreground = AccentBrush;
-            }
-        }
-    }
-
-    private void OnEngineButtonClick(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Button btn || btn.Tag is not TextTranslateEngine engine) return;
-        _settings.TextTranslateEngine = engine;
-        HighlightEngine();
+        if (_loadingUi) return;
+        _settings.TextTranslateEngine = EngineLlm.IsChecked == true
+            ? TextTranslateEngine.Llm
+            : TextTranslateEngine.Bing;
         UpdateEngineDependentUi();
         PersistSettings();
         _ = TranslateNowAsync();
@@ -216,6 +161,9 @@ public sealed partial class MainPage : Page
             ? Visibility.Visible
             : Visibility.Collapsed;
     }
+
+    /// <summary>Cancel hotkey recording before capture / modal flows.</summary>
+    public void CancelTransientUi() => CancelHotkeyRecording(restore: true);
 
     private static void SelectLang(ComboBox box, string value)
     {
@@ -246,7 +194,6 @@ public sealed partial class MainPage : Page
         _settings.PinOnTop = PinButton.IsChecked == true;
         _settings.Autostart = AutostartSwitch.IsOn;
         _settings.ShowCompareOverlay = CompareOverlaySwitch.IsOn;
-        _settings.UiTheme = ThemeSwitch.IsOn ? "dark" : "light";
         _settings.CustomProxy = CustomProxyBox.Text.Trim();
         _settings.LlmConfig.BaseUrl = LlmBaseUrlBox.Text.Trim();
         _settings.LlmConfig.ApiKey = LlmApiKeyBox.Password;
@@ -371,14 +318,7 @@ public sealed partial class MainPage : Page
     {
         if (_loadingUi) return;
         var dark = !string.Equals(_settings.UiTheme, "dark", StringComparison.OrdinalIgnoreCase);
-        ThemeSwitch.IsOn = dark;
         ApplyTheme(dark ? "dark" : "light");
-    }
-
-    private void OnThemeSwitchToggled(object sender, RoutedEventArgs e)
-    {
-        if (_loadingUi) return;
-        ApplyTheme(ThemeSwitch.IsOn ? "dark" : "light");
     }
 
     private void ApplyTheme(string theme)
@@ -393,9 +333,12 @@ public sealed partial class MainPage : Page
     private void UpdateThemeButtonGlyph()
     {
         var dark = string.Equals(_settings.UiTheme, "dark", StringComparison.OrdinalIgnoreCase);
-        _themeSunIcon ??= new FontIcon { Glyph = "\uE706", FontSize = 16, FontFamily = FluentIcons }; // WeatherSunny
-        _themeMoonIcon ??= new FontIcon { Glyph = "\uE708", FontSize = 16, FontFamily = FluentIcons }; // WeatherMoon
-        ThemeButton.Content = dark ? _themeSunIcon : _themeMoonIcon;
+        ThemeButton.Content = new FontIcon
+        {
+            FontFamily = FluentIcons,
+            FontSize = 16,
+            Glyph = dark ? GlyphSun : GlyphMoon,
+        };
         ToolTipService.SetToolTip(ThemeButton, dark ? "切换到浅色主题" : "切换到深色主题");
     }
 
@@ -711,11 +654,12 @@ public sealed partial class MainPage : Page
 
     private static void ApplyTtsIcon(Button button, bool playing)
     {
-        var icon = LucideStrokeIcon.Create(
-            playing ? LucideStrokeIcon.SquareData : LucideStrokeIcon.Volume2Data,
-            size: 14);
-        button.Content = icon;
-        LucideStrokeIcon.BindToControlForeground(button, icon);
+        button.Content = new FontIcon
+        {
+            FontFamily = FluentIcons,
+            FontSize = 14,
+            Glyph = playing ? GlyphStop : GlyphVolume,
+        };
     }
 
     private void OnInputChanged(object sender, TextChangedEventArgs e)

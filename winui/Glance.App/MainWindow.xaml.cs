@@ -84,4 +84,10 @@ public sealed partial class MainWindow : Window
     }
 
     public void AllowClose() => _allowClose = true;
+
+    public void CancelTransientUi()
+    {
+        if (RootFrame.Content is MainPage page)
+            page.CancelTransientUi();
+    }
 }

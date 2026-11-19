@@ -1,11 +1,4 @@
-﻿target/
-src-tauri/target/
-src-tauri/target-*/
-src-tauri/Cargo.lock
-legacy-tauri/src-tauri/target/
-legacy-tauri/src-tauri/target-*/
-legacy-tauri/src-tauri/Cargo.lock
-*.log
+﻿*.log
 *.tmp
 *.bak
 dist/
@@ -15,7 +8,6 @@ tools/
 *.jpg
 *.jpeg
 !assets/*.jpg
-!legacy-tauri/assets/*.jpg
 winui/**/bin/
 winui/**/obj/
 winui/publish/

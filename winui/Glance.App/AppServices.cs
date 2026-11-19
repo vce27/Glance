@@ -181,9 +181,6 @@ public sealed class AppServices
 
     public void SuspendHotkeys() => _hotkeys.UnregisterAll();
 
-    /// <summary>Cancel transient UI (hotkey recording, etc.) before capture or other modal flows.</summary>
-    public Action? CancelUiTransientState { get; set; }
-
     public void ReregisterHotkeys(TranslatorSettings settings)
         => _ = TryReregisterHotkeys(settings, out _);
 
@@ -240,9 +237,9 @@ public sealed class AppServices
             return new CaptureSessionResult { Cancelled = true };
         }
 
-        // Drop hotkey-recording / other transient UI so global hooks are armed again
-        // after capture, and recording cannot leave SuspendHotkeys stuck.
-        try { CancelUiTransientState?.Invoke(); } catch { /* ignore */ }
+        // Drop hotkey-recording so RegisterHotKey is armed again after capture.
+        if (MainWindow is MainWindow win)
+            win.CancelTransientUi();
 
         ReportStatus(mode == CaptureMode.CopyText ? "识别中…" : "截屏翻译中…");
         var wasShown = MainWindowShown;
