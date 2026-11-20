@@ -163,6 +163,8 @@ public sealed partial class MainPage : Page
     }
 
     /// <summary>Cancel hotkey recording before capture / modal flows.</summary>
+    public bool IsSettingsOpen => SettingsScroller.Visibility == Visibility.Visible;
+
     public void CancelTransientUi() => CancelHotkeyRecording(restore: true);
 
     private static void SelectLang(ComboBox box, string value)

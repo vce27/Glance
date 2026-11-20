@@ -26,16 +26,17 @@ public sealed class CaptureOverlayResult
 /// </summary>
 public sealed class CaptureOverlayForm : Form
 {
-    private const int HandleRadius = 5;
-    private const int CardPadX = 12;
-    private const int CardPadY = 8;
-    private const int CardGap = 6;
+    private const int HandleRadius = 3;
+    private const int CardPadX = 10;
+    private const int CardPadY = 6;
+    private const int CardGap = 8;
     private const int MinSelection = 8;
     private const int ToggleW = 36;
     private const int ToggleH = 20;
     private const int ToggleGap = 6;
-    private const int ToolbarGap = 8;
-    private const int CopyBtnSize = 24;
+    private const int ToolbarGap = 10;
+    private const int CopyBtnSize = 26;
+    private const int CardRadius = 6;
     private const string CompareLabel = "对比";
     private readonly Font _toggleLabelFont = new("Microsoft YaHei UI", 9f, FontStyle.Regular);
 
@@ -269,8 +270,11 @@ public sealed class CaptureOverlayForm : Form
             _translationCard = LayoutTranslationCard();
             if (!_translationCard.IsEmpty)
             {
-                g.FillRectangle(_whiteBrush, _translationCard);
-                g.DrawRectangle(_cardBorder, _translationCard);
+                using (var path = RoundedRect(_translationCard, CardRadius))
+                {
+                    g.FillPath(_whiteBrush, path);
+                    g.DrawPath(_cardBorder, path);
+                }
                 DrawTranslationContent(g, _translationCard);
             }
         }
@@ -288,7 +292,8 @@ public sealed class CaptureOverlayForm : Form
     private void DrawTranslationInSelection(Graphics g)
     {
         // Cover original — selection itself is the translated view.
-        g.FillRectangle(_whiteBrush, _selection);
+        using (var path = RoundedRect(_selection, Math.Min(CardRadius, Math.Min(_selection.Width, _selection.Height) / 4)))
+            g.FillPath(_whiteBrush, path);
         DrawLaidOutTranslation(g, _selection, fillBackground: false);
     }
 
@@ -298,32 +303,52 @@ public sealed class CaptureOverlayForm : Form
     }
 
     /// <summary>
-    /// Prefer Youdao's layout-rendered image; else draw each OCR region in place; else plain text.
+    /// Prefer Youdao's layout image for diagrams; thin / text-only selections use centered plain text.
     /// </summary>
     private void DrawLaidOutTranslation(Graphics g, Rectangle dest, bool fillBackground)
     {
         if (fillBackground)
             g.FillRectangle(_whiteBrush, dest);
 
-        if (_resultImage is not null)
+        var thin = dest.Height <= 40;
+        var canStretchImage = _resultImage is not null
+            && !thin
+            && _resultImage.Height > 0
+            && dest.Height >= _resultImage.Height * 0.45;
+
+        if (canStretchImage)
         {
             var old = g.InterpolationMode;
             g.InterpolationMode = InterpolationMode.HighQualityBicubic;
             g.SetClip(dest, CombineMode.Replace);
-            g.DrawImage(_resultImage, dest, new Rectangle(0, 0, _resultImage.Width, _resultImage.Height), GraphicsUnit.Pixel);
+            g.DrawImage(_resultImage!, dest, new Rectangle(0, 0, _resultImage!.Width, _resultImage.Height), GraphicsUnit.Pixel);
             g.ResetClip();
             g.InterpolationMode = old;
             return;
         }
 
-        if (TryDrawRegionTexts(g, dest))
+        // Region boxes look tidy for multi-block diagrams; single-line OCR looks messy — use plain text.
+        var regionCount = _pairs.Count(p => p.Bounds is not null && !string.IsNullOrWhiteSpace(p.Target));
+        if (!thin && regionCount >= 2 && TryDrawRegionTexts(g, dest))
             return;
 
         if (!string.IsNullOrWhiteSpace(_targetText))
         {
-            var textRect = Rectangle.Inflate(dest, -CardPadX, -CardPadY);
+            var textRect = Rectangle.Inflate(dest, -CardPadX, -Math.Max(2, CardPadY - 2));
+            if (textRect.Width <= 0 || textRect.Height <= 0) textRect = dest;
+            var fontSize = thin
+                ? Math.Clamp(dest.Height * 0.52f, 9f, 13f)
+                : _uiFont.Size;
+            using var font = new Font(_uiFont.FontFamily, fontSize, FontStyle.Regular);
             using var brush = new SolidBrush(Color.FromArgb(32, 32, 32));
-            g.DrawString(_targetText, _uiFont, brush, textRect, _cardFormat);
+            using var format = new StringFormat
+            {
+                Alignment = StringAlignment.Near,
+                LineAlignment = StringAlignment.Center,
+                Trimming = StringTrimming.EllipsisWord,
+                FormatFlags = StringFormatFlags.LineLimit,
+            };
+            g.DrawString(_targetText, font, brush, textRect, format);
         }
     }
 
@@ -332,21 +357,14 @@ public sealed class CaptureOverlayForm : Form
         var regions = _pairs.Where(p => p.Bounds is not null && !string.IsNullOrWhiteSpace(p.Target)).ToList();
         if (regions.Count == 0) return false;
 
-        // Crop coords → dest. Prefer rendered-image size as reference when present.
-        var srcW = _resultImage?.Width > 0 ? _resultImage.Width : Math.Max(1, _selection.Width);
-        var srcH = _resultImage?.Height > 0 ? _resultImage.Height : Math.Max(1, _selection.Height);
-        // When only regions exist, bounds are relative to the uploaded crop (== selection pixels).
-        if (_resultImage is null)
-        {
-            srcW = Math.Max(1, _selection.Width);
-            srcH = Math.Max(1, _selection.Height);
-        }
+        var srcW = Math.Max(1, _selection.Width);
+        var srcH = Math.Max(1, _selection.Height);
 
         using var textBrush = new SolidBrush(Color.FromArgb(32, 32, 32));
         using var format = new StringFormat
         {
             Alignment = StringAlignment.Near,
-            LineAlignment = StringAlignment.Near,
+            LineAlignment = StringAlignment.Center,
             Trimming = StringTrimming.EllipsisWord,
             FormatFlags = StringFormatFlags.LineLimit,
         };
@@ -361,13 +379,13 @@ public sealed class CaptureOverlayForm : Form
             var box = Rectangle.Intersect(dest, new Rectangle(rx, ry, rw, rh));
             if (box.Width <= 0 || box.Height <= 0) continue;
 
-            g.FillRectangle(_whiteBrush, box);
-            var pad = Math.Max(1, Math.Min(4, Math.Min(box.Width, box.Height) / 8));
+            using (var path = RoundedRect(box, Math.Min(4, Math.Min(box.Width, box.Height) / 3)))
+                g.FillPath(_whiteBrush, path);
+            var pad = Math.Max(2, Math.Min(6, Math.Min(box.Width, box.Height) / 6));
             var textRect = Rectangle.Inflate(box, -pad, -pad);
             if (textRect.Width <= 0 || textRect.Height <= 0) textRect = box;
 
-            // Fit font roughly to region height so flowchart boxes stay readable.
-            var fontSize = Math.Clamp(textRect.Height * 0.55f, 7f, 14f);
+            var fontSize = Math.Clamp(textRect.Height * 0.55f, 8f, 14f);
             using var font = new Font(_uiFont.FontFamily, fontSize, FontStyle.Regular);
             g.DrawString(pair.Target, font, textBrush, textRect, format);
         }
@@ -518,23 +536,19 @@ public sealed class CaptureOverlayForm : Form
         if (_selection.IsEmpty) return;
 
         var compareW = MeasureCompareToggleWidth();
-        var copyW = CopyBtnSize;
-        var totalW = Math.Max(compareW, copyW);
-        const int stackGap = 6;
-        var totalH = ToggleH + stackGap + CopyBtnSize;
+        const int gap = 8;
+        var totalW = compareW + gap + CopyBtnSize;
+        var totalH = Math.Max(ToggleH, CopyBtnSize);
 
-        // Prefer the right of the selection so large regions still leave the control visible.
-        var x = _selection.Right + ToolbarGap;
-        if (x + totalW > Width - 4)
-        {
-            x = Math.Max(4, _selection.Right - totalW - ToolbarGap);
-            if (x + totalW > Width - 4)
-                x = Math.Max(4, Width - totalW - 4);
-        }
+        // Anchor under the translation card (compare on) or selection — keeps chrome off the text.
+        var anchor = !_translationCard.IsEmpty ? _translationCard : _selection;
+        var y = anchor.Bottom + ToolbarGap;
+        if (y + totalH > Height - 4)
+            y = Math.Max(4, anchor.Y - totalH - ToolbarGap);
 
-        var y = Math.Clamp(_selection.Y + 4, 4, Math.Max(4, Height - totalH - 4));
-        compareToggle = new Rectangle(x, y, compareW, ToggleH);
-        copyButton = new Rectangle(x, y + ToggleH + stackGap, copyW, CopyBtnSize);
+        var x = Math.Clamp(anchor.X, 4, Math.Max(4, Width - totalW - 4));
+        compareToggle = new Rectangle(x, y + (totalH - ToggleH) / 2, compareW, ToggleH);
+        copyButton = new Rectangle(x + compareW + gap, y + (totalH - CopyBtnSize) / 2, CopyBtnSize, CopyBtnSize);
     }
 
     private static GraphicsPath RoundedRect(Rectangle bounds, int radius)

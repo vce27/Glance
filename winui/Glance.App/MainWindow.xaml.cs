@@ -20,7 +20,8 @@ public sealed partial class MainWindow : Window
 
         SystemBackdrop = new MicaBackdrop { Kind = Microsoft.UI.Composition.SystemBackdrops.MicaKind.Base };
 
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(560, 304));
+        // Compact chrome: title + toolbar + two panes (~150) + status. Settings expands later.
+        AppWindow.Resize(new Windows.Graphics.SizeInt32(560, 360));
         RootFrame.Navigate(typeof(MainPage));
         ApplyCaptionButtonColors(ElementTheme.Light);
 
@@ -77,10 +78,14 @@ public sealed partial class MainWindow : Window
         titleBar.ButtonPressedBackgroundColor = pressBg;
     }
 
+    public bool IsSettingsOpen
+        => RootFrame.Content is MainPage page && page.IsSettingsOpen;
+
     public void SetContentHeight(bool settingsOpen)
     {
         var size = AppWindow.Size;
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(size.Width, settingsOpen ? 720 : 304));
+        // Keep width; snap height so closed settings don't leave a tall empty band.
+        AppWindow.Resize(new Windows.Graphics.SizeInt32(size.Width, settingsOpen ? 720 : 360));
     }
 
     public void AllowClose() => _allowClose = true;

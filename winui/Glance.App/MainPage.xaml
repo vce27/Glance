@@ -8,10 +8,10 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid Padding="16,8,16,12" RowSpacing="10">
+    <Grid Padding="16,8,16,12" RowSpacing="8">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" MinHeight="120" />
+            <RowDefinition Height="150" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -87,51 +87,67 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <Grid>
-                <TextBox
-                    x:Name="InputBox"
-                    AcceptsReturn="True"
-                    HorizontalAlignment="Stretch"
-                    Padding="10,8,10,32"
-                    PlaceholderText="输入要翻译的文本…"
-                    TextChanged="OnInputChanged"
-                    TextWrapping="Wrap"
-                    VerticalAlignment="Stretch" />
-                <Button
-                    x:Name="InputTtsButton"
-                    Margin="0,0,6,6"
-                    HorizontalAlignment="Right"
-                    VerticalAlignment="Bottom"
-                    Click="OnTtsClick"
-                    Style="{StaticResource GlancePaneActionButtonStyle}"
-                    Tag="input"
-                    ToolTipService.ToolTip="朗读原文" />
-            </Grid>
-            <Grid Grid.Column="1">
-                <TextBox
-                    x:Name="OutputBox"
-                    AcceptsReturn="True"
-                    HorizontalAlignment="Stretch"
-                    IsReadOnly="True"
-                    Padding="10,8,10,32"
-                    PlaceholderText="译文"
-                    TextWrapping="Wrap"
-                    VerticalAlignment="Stretch" />
-                <Button
-                    x:Name="OutputTtsButton"
-                    Margin="0,0,6,6"
-                    HorizontalAlignment="Right"
-                    VerticalAlignment="Bottom"
-                    Click="OnTtsClick"
-                    Style="{StaticResource GlancePaneActionButtonStyle}"
-                    Tag="output"
-                    ToolTipService.ToolTip="朗读译文" />
-            </Grid>
+            <Border
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="8">
+                <Grid>
+                    <TextBox
+                        x:Name="InputBox"
+                        AcceptsReturn="True"
+                        HorizontalAlignment="Stretch"
+                        BorderThickness="0"
+                        Padding="10,8,10,32"
+                        PlaceholderText="输入要翻译的文本…"
+                        TextChanged="OnInputChanged"
+                        TextWrapping="Wrap"
+                        VerticalAlignment="Stretch" />
+                    <Button
+                        x:Name="InputTtsButton"
+                        Margin="0,0,6,6"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Bottom"
+                        Click="OnTtsClick"
+                        Style="{StaticResource GlancePaneActionButtonStyle}"
+                        Tag="input"
+                        ToolTipService.ToolTip="朗读原文" />
+                </Grid>
+            </Border>
+            <Border
+                Grid.Column="1"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="8">
+                <Grid>
+                    <TextBox
+                        x:Name="OutputBox"
+                        AcceptsReturn="True"
+                        HorizontalAlignment="Stretch"
+                        BorderThickness="0"
+                        IsReadOnly="True"
+                        Padding="10,8,10,32"
+                        PlaceholderText="译文"
+                        TextWrapping="Wrap"
+                        VerticalAlignment="Stretch" />
+                    <Button
+                        x:Name="OutputTtsButton"
+                        Margin="0,0,6,6"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Bottom"
+                        Click="OnTtsClick"
+                        Style="{StaticResource GlancePaneActionButtonStyle}"
+                        Tag="output"
+                        ToolTipService.ToolTip="朗读译文" />
+                </Grid>
+            </Border>
         </Grid>
 
         <TextBlock
             x:Name="StatusText"
             Grid.Row="2"
+            MinHeight="0"
             Opacity="0.7"
             Text=""
             TextWrapping="Wrap" />
