@@ -15,9 +15,11 @@ public sealed class AppUpdateService
 
     public AppUpdateService(string? localSourceOverride = null)
     {
+        // Multi-thread Range download for large nupkg (PCL2-style); small JSON stays single-stream.
+        IFileDownloader downloader = new MultiThreadFileDownloader(parts: 8);
         IUpdateSource source = !string.IsNullOrWhiteSpace(localSourceOverride)
             ? new SimpleFileSource(new DirectoryInfo(localSourceOverride))
-            : new GithubSource(GitHubRepoUrl, accessToken: null, prerelease: false);
+            : new GithubSource(GitHubRepoUrl, accessToken: null, prerelease: false, downloader: downloader);
         _mgr = new UpdateManager(source);
     }
 

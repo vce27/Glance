@@ -19,7 +19,7 @@
     <SatelliteResourceLanguages>en;zh-Hans</SatelliteResourceLanguages>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>0.0.13</Version>
+    <Version>0.0.14</Version>
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
   </PropertyGroup>
 
