@@ -243,6 +243,7 @@ public sealed class AppServices
 
         ReportStatus(mode == CaptureMode.CopyText ? "识别中…" : "截屏翻译中…");
         var wasShown = MainWindowShown;
+        var showMainAfter = wasShown;
         var pinned = false;
         try
         {
@@ -257,8 +258,15 @@ public sealed class AppServices
         try
         {
             var result = await Capture.RunAsync(mode);
-            if (!string.IsNullOrWhiteSpace(result.CopiedText))
-                ReportStatus("已复制识别原文");
+            // CopiedText is set for OCR-copy mode and overlay "send to main" (may be empty string).
+            var sentToMain = result.CopiedText is not null;
+            if (sentToMain)
+            {
+                ReportStatus(string.IsNullOrWhiteSpace(result.CopiedText)
+                    ? "已打开主窗口（未识别到原文）"
+                    : "已送入主窗口（可点朗读）");
+                showMainAfter = true; // even if capture started from tray/hotkey
+            }
             else if (result.Translation is not null)
                 ReportStatus("截屏翻译完成");
             else if (result.Cancelled)
@@ -274,7 +282,7 @@ public sealed class AppServices
         }
         finally
         {
-            if (wasShown)
+            if (showMainAfter)
                 ShowMainWindow();
             // Restore pin even when the window stayed hidden (hotkey-only capture).
             if (pinned)

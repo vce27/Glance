@@ -593,9 +593,29 @@ public sealed partial class MainPage : Page
 
     private void ApplyCaptureResult(CaptureSessionResult result)
     {
-        // Only OCR-copy fills the main boxes. Screenshot translate stays on the overlay.
-        if (!string.IsNullOrWhiteSpace(result.CopiedText))
-            InputBox.Text = result.CopiedText;
+        // Overlay send-to-main / OCR-copy: fill both panes so TTS has 原文 + 译文.
+        var source = result.CopiedText?.Trim() ?? "";
+        var target = "";
+        if (result.Translation?.Pairs is { Count: > 0 } pairs)
+        {
+            if (string.IsNullOrWhiteSpace(source))
+            {
+                source = string.Join("\n", pairs
+                    .Select(p => p.Source)
+                    .Where(s => !string.IsNullOrWhiteSpace(s)));
+            }
+            target = string.Join("\n", pairs
+                .Select(p => p.Target)
+                .Where(s => !string.IsNullOrWhiteSpace(s)));
+        }
+
+        if (!string.IsNullOrWhiteSpace(source))
+        {
+            InputBox.Text = source;
+            InputBox.Focus(FocusState.Programmatic);
+        }
+        if (!string.IsNullOrWhiteSpace(target))
+            OutputBox.Text = target;
     }
 
     private async void OnTtsClick(object sender, RoutedEventArgs e)

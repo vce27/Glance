@@ -10,6 +10,8 @@ public enum CaptureOverlayResultKind
 {
     Cancelled,
     Selection,
+    /// <summary>Toolbar: close overlay and push OCR text into the main window.</summary>
+    SendToMain,
 }
 
 public sealed class CaptureOverlayResult
@@ -113,6 +115,9 @@ public sealed class CaptureOverlayForm : Form
 
     /// <summary>Raised when Result / show-state changes so the host can stop polling.</summary>
     public event EventHandler? Changed;
+
+    /// <summary>OCR source text to push into the main window (set by the toolbar button).</summary>
+    public string? OcrTextForMain { get; private set; }
 
     public CaptureOverlayForm(MonitorSnapshot snapshot)
     {
@@ -697,17 +702,23 @@ public sealed class CaptureOverlayForm : Form
 
     private void CopyOcrText()
     {
+        // Prefer OCR source; some Youdao regions only fill Target for technical terms.
         var text = string.Join("\n", _pairs
-            .Select(p => p.Source)
+            .Select(p => !string.IsNullOrWhiteSpace(p.Source) ? p.Source : p.Target)
             .Where(s => !string.IsNullOrWhiteSpace(s)));
-        if (string.IsNullOrWhiteSpace(text)) return;
-
-        try { Clipboard.SetText(text); }
-        catch { return; }
+        if (string.IsNullOrWhiteSpace(text))
+            text = _targetText;
+        // Still open main even when pairs are empty (rendered-image-only replies).
+        OcrTextForMain = string.IsNullOrWhiteSpace(text) ? "" : text.Trim();
+        if (!string.IsNullOrWhiteSpace(OcrTextForMain))
+        {
+            try { Clipboard.SetText(OcrTextForMain); } catch { /* ignore */ }
+        }
 
         _copyDone = true;
         Invalidate(InflateRect(_copyButton, 4));
         Update();
+        Finish(CaptureOverlayResultKind.SendToMain);
     }
 
     private static Rectangle InflateRect(Rectangle r, int pad)
@@ -772,11 +783,10 @@ public sealed class CaptureOverlayForm : Form
 
     public void Finish(CaptureOverlayResultKind kind)
     {
-        if (kind == CaptureOverlayResultKind.Cancelled)
-            Result = new CaptureOverlayResult { Kind = CaptureOverlayResultKind.Cancelled };
+        Result = new CaptureOverlayResult { Kind = kind };
         Cursor = Cursors.Default;
         Cursor.Current = Cursors.Default;
-        DialogResult = kind == CaptureOverlayResultKind.Cancelled ? DialogResult.Cancel : DialogResult.OK;
+        DialogResult = kind == CaptureOverlayResultKind.Selection ? DialogResult.OK : DialogResult.Cancel;
         Close();
     }
 

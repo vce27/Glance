@@ -134,6 +134,27 @@ public sealed class CaptureService
                         () => overlay.IsDisposed || !overlay.IsShowingResult || overlay.Result is not null,
                         ct);
 
+                    // Toolbar send-to-main: prefer explicit kind, then OcrTextForMain (form may already be disposed).
+                    var sendToMain = overlay.Result?.Kind == CaptureOverlayResultKind.SendToMain
+                        || overlay.OcrTextForMain is not null;
+                    if (sendToMain)
+                    {
+                        var text = overlay.OcrTextForMain;
+                        if (string.IsNullOrWhiteSpace(text) && lastTranslation is not null)
+                        {
+                            text = string.Join("\n", lastTranslation.Pairs
+                                .Select(p => !string.IsNullOrWhiteSpace(p.Source) ? p.Source : p.Target)
+                                .Where(s => !string.IsNullOrWhiteSpace(s)));
+                        }
+                        tcs.TrySetResult(new CaptureSessionResult
+                        {
+                            CopiedText = text ?? "",
+                            Translation = lastTranslation,
+                            Cancelled = false,
+                        });
+                        return;
+                    }
+
                     if (overlay.IsDisposed)
                         break;
 
