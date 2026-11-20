@@ -133,16 +133,16 @@ public sealed class AppServices
     public void ShowMainWindow()
     {
         if (MainWindow is null) return;
-        // Snap compact height unless settings panel is open (avoids a tall empty band).
-        if (MainWindow is MainWindow win)
-            win.SetContentHeight(win.IsSettingsOpen);
         var hwnd = WindowNative.GetWindowHandle(MainWindow);
         // Uncloak before show so the first painted frame is visible.
         SetWindowCloaked(hwnd, false);
         try { MainWindow.AppWindow.Show(); } catch { /* older path */ }
-        ShowWindow(hwnd, 9); // SW_RESTORE
+        // SW_SHOW (not SW_RESTORE): Restore re-applies a previous tall size and undoes our compact snap.
+        ShowWindow(hwnd, 5); // SW_SHOW
         SetForegroundWindow(hwnd);
         MainWindow.Activate();
+        if (MainWindow is MainWindow win)
+            win.SetContentHeight(win.IsSettingsOpen);
         MainWindowShown = true;
     }
 

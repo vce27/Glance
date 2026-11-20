@@ -8,6 +8,9 @@ namespace Glance.App;
 public sealed partial class MainWindow : Window
 {
     private bool _allowClose;
+    private const double CompactWidthDip = 560;
+    private const double CompactHeightDip = 292; // title + toolbar + 150px panes + padding
+    private const double SettingsHeightDip = 700;
 
     public MainWindow()
     {
@@ -20,13 +23,14 @@ public sealed partial class MainWindow : Window
 
         SystemBackdrop = new MicaBackdrop { Kind = Microsoft.UI.Composition.SystemBackdrops.MicaKind.Base };
 
-        // Compact chrome: title + toolbar + two panes (~150) + status. Settings expands later.
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(560, 360));
         RootFrame.Navigate(typeof(MainPage));
         ApplyCaptionButtonColors(ElementTheme.Light);
-
+        // Size after first layout so RasterizationScale is known.
         if (Content is FrameworkElement root)
+        {
             root.ActualThemeChanged += (_, _) => ApplyCaptionButtonColors(root.ActualTheme);
+            root.Loaded += (_, _) => SetContentHeight(false);
+        }
 
         AppWindow.Closing += (_, e) =>
         {
@@ -83,9 +87,18 @@ public sealed partial class MainWindow : Window
 
     public void SetContentHeight(bool settingsOpen)
     {
-        var size = AppWindow.Size;
-        // Keep width; snap height so closed settings don't leave a tall empty band.
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(size.Width, settingsOpen ? 720 : 360));
+        var scale = 1.0;
+        if (Content is FrameworkElement root && root.XamlRoot is { } xamlRoot)
+            scale = xamlRoot.RasterizationScale;
+
+        // AppWindow.Resize is physical pixels — convert from DIP or high-DPI leaves a tall empty band.
+        var widthDip = AppWindow.Size.Width > 0
+            ? AppWindow.Size.Width / scale
+            : CompactWidthDip;
+        var heightDip = settingsOpen ? SettingsHeightDip : CompactHeightDip;
+        var w = Math.Max(480, (int)Math.Ceiling(widthDip * scale));
+        var h = Math.Max(200, (int)Math.Ceiling(heightDip * scale));
+        AppWindow.Resize(new Windows.Graphics.SizeInt32(w, h));
     }
 
     public void AllowClose() => _allowClose = true;
