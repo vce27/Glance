@@ -24,25 +24,16 @@ cd winui
 dotnet publish Glance.App\Glance.App.csproj -c Release -r win-x64 --self-contained true -p:Platform=x64 -p:PublishTrimmed=false -o .\publish\win-x64
 ```
 
-Install (Velopack, enables auto-update):
+Install (Inno Setup + Velopack, choose directory, enables auto-update):
 
 ```powershell
-# after vpk pack … --msi -o .\publish\velopack
-
-# Recommended: Windows Installer wizard (choose per-user / all-users + directory)
-.\winui\publish\velopack\Glance-win.msi
-
-# One-click Setup (always %LOCALAPPDATA%\Glance, no wizard)
-.\winui\publish\velopack\Glance-win-Setup.exe
-# silent Setup:
-.\winui\publish\velopack\Glance-win-Setup.exe --silent
-# Setup with custom folder:
-.\winui\publish\velopack\Glance-win-Setup.exe --installto "D:\Apps\Glance"
+# CI builds packaging/installer/Glance.iss → artifacts/release/Glance-win-Setup.exe
+# Wizard lets you pick the install folder (default %LOCALAPPDATA%\Glance).
+.\artifacts\release\Glance-win-Setup.exe
 ```
 
-- **MSI**：可选「仅当前用户」或「所有用户」；所有用户默认到 `Program Files\vce27\Glance`
-- **Setup.exe**：默认 `%LOCALAPPDATA%\Glance\`
-- Do **not** manually copy `publish\win-x64\*` into the install folder — it breaks Velopack.
+Release ships **only** `Glance-win-Setup.exe` for users (`*.nupkg` / `releases.win.json` stay for auto-update).
+Do **not** manually copy `publish\win-x64\*` into the install folder — it breaks Velopack.
 
 ## Features (MVP)
 
@@ -52,7 +43,7 @@ Install (Velopack, enables auto-update):
 - OCR-copy hotkey → clipboard
 - Tray (close hides to tray), single instance, autostart `--minimized`
 - Settings at `%APPDATA%\com.harukaon.glance\`
-- **Velopack** auto-update from GitHub Releases (MSI / Setup); `v*` tags publish MSI + Setup + portable ZIP
+- **Velopack** auto-update from GitHub Releases; `v*` tags publish Setup（可选安装目录）
 
 ## Project layout
 
@@ -65,7 +56,7 @@ winui/
 
 ## Updates (Velopack)
 
-Install via `Glance-win.msi`（推荐）或 `Glance-win-Setup.exe` from GitHub Releases (not the portable ZIP). Then:
+Install via `Glance-win-Setup.exe` from GitHub Releases. Then:
 
 - Settings → **自动检查**: startup check, notify when a newer release exists
 - **检查更新**: download + restart into the new version
