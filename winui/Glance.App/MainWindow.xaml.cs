@@ -52,6 +52,7 @@ public sealed partial class MainWindow : Window
         if (RootFrame.Content is FrameworkElement page)
             page.RequestedTheme = elementTheme;
         ApplyCaptionButtonColors(elementTheme);
+        AppServices.Current.ApplyToolWindowThemes(theme);
     }
 
     /// <summary>
@@ -79,15 +80,8 @@ public sealed partial class MainWindow : Window
         titleBar.ButtonPressedBackgroundColor = pressBg;
     }
 
-    public bool IsSettingsOpen
-        => RootFrame.Content is MainPage page && page.IsSettingsOpen;
-
-    /// <summary>Keep for settings toggle call sites; always measures real content.</summary>
-    public void SetContentHeight(bool settingsOpen) => SnapToContent();
-
     /// <summary>
     /// Size the HWND client area to the laid-out content height (DPI-aware).
-    /// Magic constants left a blank Mica band under the panes.
     /// </summary>
     public void SnapToContent(bool forceCompactWidth = false)
     {

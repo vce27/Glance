@@ -18,7 +18,9 @@ public sealed class AppServices
     public static AppServices Current { get; private set; } = null!;
 
     public ConfigStore Store { get; } = new();
+    public WordbookStore Wordbook { get; }
     public YoudaoClient Youdao { get; } = new();
+    public YoudaoDictClient Dict { get; } = new();
     public TextTranslator Translator { get; } = new();
     public CaptureService Capture { get; }
     public AppUpdateService Updates { get; }
@@ -31,6 +33,8 @@ public sealed class AppServices
     public void ReportStatus(string message)
         => MainWindow?.DispatcherQueue.TryEnqueue(() => StatusChanged?.Invoke(message));
 
+    private SettingsWindow? _settingsWindow;
+    private WordbookWindow? _wordbookWindow;
     private readonly HotkeyWindow _hotkeys = new();
     private TrayIconHost? _tray;
     private Mutex? _singleInstance;
@@ -48,6 +52,8 @@ public sealed class AppServices
 
     public AppServices()
     {
+        Store.Ensure();
+        Wordbook = new WordbookStore(Store.BaseDir);
         Capture = new CaptureService(Youdao, Store);
         var localUpdate = Environment.GetEnvironmentVariable("GLANCE_UPDATE_SOURCE");
         Updates = new AppUpdateService(localUpdate);
@@ -142,10 +148,10 @@ public sealed class AppServices
         SetForegroundWindow(hwnd);
         MainWindow.Activate();
         // Snap after show so layout/DPI are real; enqueue once more after the first frame.
-        if (MainWindow is MainWindow win)
+        if (MainWindow is MainWindow main)
         {
-            win.SnapToContent();
-            win.DispatcherQueue.TryEnqueue(() => win.SnapToContent());
+            main.SnapToContent();
+            main.DispatcherQueue.TryEnqueue(() => main.SnapToContent());
         }
         MainWindowShown = true;
     }
@@ -245,8 +251,7 @@ public sealed class AppServices
         }
 
         // Drop hotkey-recording so RegisterHotKey is armed again after capture.
-        if (MainWindow is MainWindow win)
-            win.CancelTransientUi();
+        CancelTransientUi();
 
         ReportStatus(mode == CaptureMode.CopyText ? "识别中…" : "截屏翻译中…");
         var wasShown = MainWindowShown;
@@ -297,11 +302,51 @@ public sealed class AppServices
         }
     }
 
+    public void CancelTransientUi()
+    {
+        if (MainWindow is MainWindow win)
+            win.CancelTransientUi();
+        _settingsWindow?.CancelTransientUi();
+    }
+
+    public void ShowSettingsWindow()
+    {
+        if (_settingsWindow is null)
+        {
+            _settingsWindow = new SettingsWindow();
+            _settingsWindow.Closed += (_, _) => _settingsWindow = null;
+            ApplyToolWindowThemes(Store.LoadSettings().UiTheme);
+        }
+        ToolWindow.Activate(_settingsWindow);
+    }
+
+    public void ShowWordbookWindow()
+    {
+        if (_wordbookWindow is null)
+        {
+            _wordbookWindow = new WordbookWindow();
+            _wordbookWindow.Closed += (_, _) => _wordbookWindow = null;
+            ApplyToolWindowThemes(Store.LoadSettings().UiTheme);
+        }
+        _wordbookWindow.Refresh();
+        ToolWindow.Activate(_wordbookWindow);
+    }
+
+    public void RefreshWordbookWindow() => _wordbookWindow?.Refresh();
+
+    public void ApplyToolWindowThemes(string? theme)
+    {
+        ToolWindow.ApplyTheme(_settingsWindow, theme);
+        ToolWindow.ApplyTheme(_wordbookWindow, theme);
+    }
+
     public void Quit()
     {
         _hotkeys.UnregisterAll();
         _tray?.Dispose();
         ReleaseSingleInstance();
+        try { _settingsWindow?.Close(); } catch { /* ignore */ }
+        try { _wordbookWindow?.Close(); } catch { /* ignore */ }
         if (MainWindow is MainWindow win)
             win.AllowClose();
         Application.Current.Exit();

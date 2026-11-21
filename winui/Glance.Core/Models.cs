@@ -66,6 +66,8 @@ public sealed class TranslationResponse
 public sealed class TextTranslationResult
 {
     public string TranslatedText { get; set; } = "";
+    /// <summary>Target-side romanization from Bing (Chinese pinyin, Japanese romaji, …).</summary>
+    public string Transliteration { get; set; } = "";
 }
 
 public enum CaptureMode

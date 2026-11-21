@@ -56,56 +56,113 @@
                 </Border>
             </ControlTemplate>
 
+            <!-- Ghost icons: no chrome until hover (toolbar + pane actions). -->
+            <ControlTemplate x:Key="GlanceGhostIconButtonTemplate" TargetType="Button">
+                <Border
+                    x:Name="RootGrid"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    CornerRadius="4">
+                    <VisualStateManager.VisualStateGroups>
+                        <VisualStateGroup x:Name="CommonStates">
+                            <VisualState x:Name="Normal">
+                                <VisualState.Setters>
+                                    <Setter Target="RootGrid.Opacity" Value="0.55" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="PointerOver">
+                                <VisualState.Setters>
+                                    <Setter Target="RootGrid.Opacity" Value="1" />
+                                    <Setter Target="RootGrid.Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="Pressed">
+                                <VisualState.Setters>
+                                    <Setter Target="RootGrid.Opacity" Value="1" />
+                                    <Setter Target="RootGrid.Background" Value="{ThemeResource SubtleFillColorTertiaryBrush}" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="Disabled">
+                                <VisualState.Setters>
+                                    <Setter Target="RootGrid.Opacity" Value="0.25" />
+                                </VisualState.Setters>
+                            </VisualState>
+                        </VisualStateGroup>
+                    </VisualStateManager.VisualStateGroups>
+                    <ContentPresenter
+                        x:Name="ContentPresenter"
+                        Padding="{TemplateBinding Padding}"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Content="{TemplateBinding Content}"
+                        ContentTemplate="{TemplateBinding ContentTemplate}"
+                        Foreground="{TemplateBinding Foreground}" />
+                </Border>
+            </ControlTemplate>
+
+            <!-- Quiet toolbar chrome. -->
             <Style x:Key="GlanceToolbarButtonStyle" TargetType="Button">
-                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
-                <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
-                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
-                <Setter Property="BorderThickness" Value="1" />
-                <Setter Property="Padding" Value="6" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Setter Property="BorderBrush" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="Width" Value="32" />
+                <Setter Property="Height" Value="32" />
                 <Setter Property="MinWidth" Value="32" />
                 <Setter Property="MinHeight" Value="32" />
-                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="CornerRadius" Value="6" />
                 <Setter Property="HorizontalAlignment" Value="Center" />
                 <Setter Property="VerticalAlignment" Value="Center" />
-                <Setter Property="Template" Value="{StaticResource GlanceToolbarButtonTemplate}" />
+                <Setter Property="Template" Value="{StaticResource GlanceGhostIconButtonTemplate}" />
             </Style>
 
             <Style
                 x:Key="GlanceThemeToggleStyle"
                 BasedOn="{StaticResource GlanceToolbarButtonStyle}"
-                TargetType="Button">
+                TargetType="Button" />
+
+            <!-- Capture is the primary action — keep it visibly accented. -->
+            <Style x:Key="GlanceCaptureButtonStyle" TargetType="Button">
+                <Setter Property="Background" Value="{StaticResource GlanceAccentBrush}" />
+                <Setter Property="Foreground" Value="{StaticResource GlanceWhiteBrush}" />
+                <Setter Property="BorderThickness" Value="0" />
                 <Setter Property="Padding" Value="0" />
                 <Setter Property="Width" Value="32" />
                 <Setter Property="Height" Value="32" />
+                <Setter Property="MinWidth" Value="32" />
+                <Setter Property="MinHeight" Value="32" />
+                <Setter Property="CornerRadius" Value="6" />
+                <Setter Property="HorizontalAlignment" Value="Center" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="Template" Value="{StaticResource GlanceToolbarButtonTemplate}" />
             </Style>
 
-            <!-- Corner actions on text panes: always readable on white/dark fields -->
-            <Style
-                x:Key="GlancePaneActionButtonStyle"
-                BasedOn="{StaticResource GlanceToolbarButtonStyle}"
-                TargetType="Button">
-                <Setter Property="Background" Value="{ThemeResource ControlFillColorDefaultBrush}" />
-                <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
-                <Setter Property="BorderBrush" Value="{ThemeResource ControlStrongStrokeColorDefaultBrush}" />
-                <Setter Property="BorderThickness" Value="1" />
+            <Style x:Key="GlancePaneActionButtonStyle" TargetType="Button">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Setter Property="BorderThickness" Value="0" />
                 <Setter Property="Padding" Value="0" />
-                <Setter Property="Width" Value="28" />
-                <Setter Property="Height" Value="28" />
-                <Setter Property="MinWidth" Value="28" />
-                <Setter Property="MinHeight" Value="28" />
-                <Setter Property="CornerRadius" Value="8" />
-                <Setter Property="Opacity" Value="1" />
+                <Setter Property="Width" Value="26" />
+                <Setter Property="Height" Value="26" />
+                <Setter Property="MinWidth" Value="26" />
+                <Setter Property="MinHeight" Value="26" />
+                <Setter Property="CornerRadius" Value="4" />
+                <Setter Property="HorizontalAlignment" Value="Center" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="Template" Value="{StaticResource GlanceGhostIconButtonTemplate}" />
             </Style>
 
             <Style x:Key="GlanceToolbarToggleStyle" TargetType="ToggleButton">
-                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
-                <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
-                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
-                <Setter Property="BorderThickness" Value="1" />
-                <Setter Property="Padding" Value="6" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="Width" Value="32" />
+                <Setter Property="Height" Value="32" />
                 <Setter Property="MinWidth" Value="32" />
                 <Setter Property="MinHeight" Value="32" />
-                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="CornerRadius" Value="6" />
                 <Setter Property="HorizontalAlignment" Value="Center" />
                 <Setter Property="VerticalAlignment" Value="Center" />
                 <Setter Property="Template">
@@ -113,54 +170,54 @@
                         <ControlTemplate TargetType="ToggleButton">
                             <Border
                                 x:Name="RootGrid"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="{TemplateBinding CornerRadius}">
+                                Background="Transparent"
+                                BorderThickness="0"
+                                CornerRadius="6"
+                                Opacity="0.55">
                                 <VisualStateManager.VisualStateGroups>
                                     <VisualStateGroup x:Name="CommonStates">
                                         <VisualState x:Name="Normal" />
                                         <VisualState x:Name="PointerOver">
                                             <VisualState.Setters>
-                                                <Setter Target="RootGrid.Background" Value="{StaticResource GlanceAccentBrush}" />
-                                                <Setter Target="ContentPresenter.Foreground" Value="{StaticResource GlanceWhiteBrush}" />
+                                                <Setter Target="RootGrid.Opacity" Value="1" />
+                                                <Setter Target="RootGrid.Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
                                             </VisualState.Setters>
                                         </VisualState>
                                         <VisualState x:Name="Pressed">
                                             <VisualState.Setters>
-                                                <Setter Target="RootGrid.Background" Value="{StaticResource GlanceAccentBrush}" />
-                                                <Setter Target="ContentPresenter.Foreground" Value="{StaticResource GlanceWhiteBrush}" />
-                                                <Setter Target="RootGrid.Opacity" Value="0.9" />
+                                                <Setter Target="RootGrid.Opacity" Value="1" />
+                                                <Setter Target="RootGrid.Background" Value="{ThemeResource SubtleFillColorTertiaryBrush}" />
                                             </VisualState.Setters>
                                         </VisualState>
                                         <VisualState x:Name="Disabled">
                                             <VisualState.Setters>
-                                                <Setter Target="RootGrid.Opacity" Value="0.4" />
+                                                <Setter Target="RootGrid.Opacity" Value="0.25" />
                                             </VisualState.Setters>
                                         </VisualState>
                                         <VisualState x:Name="Checked">
                                             <VisualState.Setters>
+                                                <Setter Target="RootGrid.Opacity" Value="1" />
                                                 <Setter Target="RootGrid.Background" Value="{StaticResource GlanceAccentBrush}" />
                                                 <Setter Target="ContentPresenter.Foreground" Value="{StaticResource GlanceWhiteBrush}" />
                                             </VisualState.Setters>
                                         </VisualState>
                                         <VisualState x:Name="CheckedPointerOver">
                                             <VisualState.Setters>
+                                                <Setter Target="RootGrid.Opacity" Value="1" />
                                                 <Setter Target="RootGrid.Background" Value="{StaticResource GlanceAccentBrush}" />
                                                 <Setter Target="ContentPresenter.Foreground" Value="{StaticResource GlanceWhiteBrush}" />
-                                                <Setter Target="RootGrid.Opacity" Value="0.92" />
                                             </VisualState.Setters>
                                         </VisualState>
                                         <VisualState x:Name="CheckedPressed">
                                             <VisualState.Setters>
+                                                <Setter Target="RootGrid.Opacity" Value="0.9" />
                                                 <Setter Target="RootGrid.Background" Value="{StaticResource GlanceAccentBrush}" />
                                                 <Setter Target="ContentPresenter.Foreground" Value="{StaticResource GlanceWhiteBrush}" />
-                                                <Setter Target="RootGrid.Opacity" Value="0.85" />
                                             </VisualState.Setters>
                                         </VisualState>
                                         <VisualState x:Name="CheckedDisabled">
                                             <VisualState.Setters>
-                                                <Setter Target="RootGrid.Opacity" Value="0.4" />
+                                                <Setter Target="RootGrid.Opacity" Value="0.3" />
                                             </VisualState.Setters>
                                         </VisualState>
                                     </VisualStateGroup>

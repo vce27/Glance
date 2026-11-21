@@ -64,6 +64,8 @@ public sealed class BingTranslateClient
             ["text"] = text,
             ["token"] = token.Value,
             ["key"] = token.Key,
+            // Ask Bing for Latin transliteration (pinyin / romaji) of the target text.
+            ["toScript"] = "Latn",
         });
 
         using var resp = await http.SendAsync(req, ct);
@@ -80,19 +82,30 @@ public sealed class BingTranslateClient
             throw new InvalidOperationException("Bing translate auth failed");
 
         var translated = "";
+        var translit = "";
         if (root.ValueKind == JsonValueKind.Array && root.GetArrayLength() > 0)
         {
             var first = root[0];
             if (first.TryGetProperty("translations", out var translations) &&
-                translations.GetArrayLength() > 0 &&
-                translations[0].TryGetProperty("text", out var t))
-                translated = t.GetString() ?? "";
+                translations.GetArrayLength() > 0)
+            {
+                var tr = translations[0];
+                if (tr.TryGetProperty("text", out var t))
+                    translated = t.GetString() ?? "";
+                if (tr.TryGetProperty("transliteration", out var tl) &&
+                    tl.TryGetProperty("text", out var tlt))
+                    translit = tlt.GetString() ?? "";
+            }
         }
 
         if (string.IsNullOrEmpty(translated))
             throw new InvalidOperationException("Bing translate returned empty result");
 
-        return new TextTranslationResult { TranslatedText = translated };
+        return new TextTranslationResult
+        {
+            TranslatedText = translated,
+            Transliteration = translit,
+        };
     }
 
     private async Task<BingToken> GetOrRefreshTokenAsync(HttpClient http, CancellationToken ct, string? preferHost = null)
