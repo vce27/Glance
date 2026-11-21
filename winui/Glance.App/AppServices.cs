@@ -141,8 +141,12 @@ public sealed class AppServices
         ShowWindow(hwnd, 5); // SW_SHOW
         SetForegroundWindow(hwnd);
         MainWindow.Activate();
+        // Snap after show so layout/DPI are real; enqueue once more after the first frame.
         if (MainWindow is MainWindow win)
-            win.SetContentHeight(win.IsSettingsOpen);
+        {
+            win.SnapToContent();
+            win.DispatcherQueue.TryEnqueue(() => win.SnapToContent());
+        }
         MainWindowShown = true;
     }
 

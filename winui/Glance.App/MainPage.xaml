@@ -8,10 +8,10 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid Padding="16,8,16,12" RowSpacing="8">
+    <Grid Padding="16,8,16,10" RowSpacing="8" VerticalAlignment="Top">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="150" />
+            <RowDefinition Height="140" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -150,7 +150,8 @@
             MinHeight="0"
             Opacity="0.7"
             Text=""
-            TextWrapping="Wrap" />
+            TextWrapping="Wrap"
+            Visibility="Collapsed" />
 
         <ScrollViewer
             x:Name="SettingsScroller"

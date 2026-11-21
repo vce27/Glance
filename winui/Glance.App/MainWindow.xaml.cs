@@ -1,6 +1,7 @@
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
+using Windows.Foundation;
 using Windows.UI;
 
 namespace Glance.App;
@@ -8,9 +9,7 @@ namespace Glance.App;
 public sealed partial class MainWindow : Window
 {
     private bool _allowClose;
-    private const double CompactWidthDip = 560;
-    private const double CompactHeightDip = 292; // title + toolbar + 150px panes + padding
-    private const double SettingsHeightDip = 700;
+    private const double FallbackWidthDip = 560;
 
     public MainWindow()
     {
@@ -25,11 +24,10 @@ public sealed partial class MainWindow : Window
 
         RootFrame.Navigate(typeof(MainPage));
         ApplyCaptionButtonColors(ElementTheme.Light);
-        // Size after first layout so RasterizationScale is known.
         if (Content is FrameworkElement root)
         {
             root.ActualThemeChanged += (_, _) => ApplyCaptionButtonColors(root.ActualTheme);
-            root.Loaded += (_, _) => SetContentHeight(false);
+            root.Loaded += (_, _) => SnapToContent(forceCompactWidth: true);
         }
 
         AppWindow.Closing += (_, e) =>
@@ -66,7 +64,6 @@ public sealed partial class MainWindow : Window
         var dark = theme == ElementTheme.Dark
             || (theme == ElementTheme.Default && Application.Current.RequestedTheme == ApplicationTheme.Dark);
 
-        // Active / inactive both need contrast; hover keeps a light wash.
         Color fg = dark ? Color.FromArgb(255, 202, 202, 202) : Color.FromArgb(255, 50, 50, 50);
         Color fgInactive = dark ? Color.FromArgb(255, 140, 140, 140) : Color.FromArgb(255, 96, 96, 96);
         Color hoverBg = dark ? Color.FromArgb(40, 255, 255, 255) : Color.FromArgb(30, 0, 0, 0);
@@ -85,20 +82,43 @@ public sealed partial class MainWindow : Window
     public bool IsSettingsOpen
         => RootFrame.Content is MainPage page && page.IsSettingsOpen;
 
-    public void SetContentHeight(bool settingsOpen)
-    {
-        var scale = 1.0;
-        if (Content is FrameworkElement root && root.XamlRoot is { } xamlRoot)
-            scale = xamlRoot.RasterizationScale;
+    /// <summary>Keep for settings toggle call sites; always measures real content.</summary>
+    public void SetContentHeight(bool settingsOpen) => SnapToContent();
 
-        // AppWindow.Resize is physical pixels — convert from DIP or high-DPI leaves a tall empty band.
-        var widthDip = AppWindow.Size.Width > 0
-            ? AppWindow.Size.Width / scale
-            : CompactWidthDip;
-        var heightDip = settingsOpen ? SettingsHeightDip : CompactHeightDip;
-        var w = Math.Max(480, (int)Math.Ceiling(widthDip * scale));
+    /// <summary>
+    /// Size the HWND client area to the laid-out content height (DPI-aware).
+    /// Magic constants left a blank Mica band under the panes.
+    /// </summary>
+    public void SnapToContent(bool forceCompactWidth = false)
+    {
+        if (Content is not FrameworkElement root) return;
+        var scale = root.XamlRoot?.RasterizationScale ?? 1.0;
+
+        var compactW = (int)Math.Ceiling(FallbackWidthDip * scale);
+        var widthPx = forceCompactWidth || AppWindow.ClientSize.Width <= 0
+            ? compactW
+            : AppWindow.ClientSize.Width;
+        // First launch often inherits a huge WinUI default width — clamp back to compact.
+        if (widthPx > compactW * 1.35)
+            widthPx = compactW;
+        var widthDip = widthPx / scale;
+
+        root.UpdateLayout();
+        root.InvalidateMeasure();
+        root.Measure(new Size(widthDip, double.PositiveInfinity));
+        var heightDip = root.DesiredSize.Height;
+        if (heightDip <= 0) return;
+
+        var w = Math.Max(480, widthPx);
         var h = Math.Max(200, (int)Math.Ceiling(heightDip * scale));
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(w, h));
+        try
+        {
+            AppWindow.ResizeClient(new Windows.Graphics.SizeInt32(w, h));
+        }
+        catch
+        {
+            AppWindow.Resize(new Windows.Graphics.SizeInt32(w, h));
+        }
     }
 
     public void AllowClose() => _allowClose = true;

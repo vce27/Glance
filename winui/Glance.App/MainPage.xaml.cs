@@ -109,7 +109,7 @@ public sealed partial class MainPage : Page
             EngineBing.IsChecked = true;
         UpdateEngineDependentUi();
         _services.ApplyPin(_settings.PinOnTop);
-        _services.StatusChanged += msg => DispatcherQueue.TryEnqueue(() => StatusText.Text = msg);
+        _services.StatusChanged += msg => DispatcherQueue.TryEnqueue(() => SetStatus(msg));
         _services.CaptureCompleted += result => DispatcherQueue.TryEnqueue(() => ApplyCaptureResult(result));
         _services.Capture.ComparePreferenceChanged += show => DispatcherQueue.TryEnqueue(() =>
         {
@@ -167,6 +167,21 @@ public sealed partial class MainPage : Page
 
     public void CancelTransientUi() => CancelHotkeyRecording(restore: true);
 
+    private void SetStatus(string? message)
+    {
+        var text = message ?? "";
+        StatusText.Text = text;
+        StatusText.Visibility = string.IsNullOrWhiteSpace(text) ? Visibility.Collapsed : Visibility.Visible;
+        if (AppServices.Current.MainWindow is MainWindow win)
+            win.SnapToContent();
+    }
+
+    private void SnapMainWindow()
+    {
+        if (AppServices.Current.MainWindow is MainWindow win)
+            win.SnapToContent();
+    }
+
     private static void SelectLang(ComboBox box, string value)
     {
         for (var i = 0; i < box.Items.Count; i++)
@@ -216,7 +231,7 @@ public sealed partial class MainPage : Page
 
         if (HasHotkeyConflict(nextHotkey, nextCopy, nextPopup))
         {
-            StatusText.Text = "热键冲突：同一快捷键不能用于多项，请改其中一个";
+            SetStatus("热键冲突：同一快捷键不能用于多项，请改其中一个");
             SetHotkeyButton(HotkeyButton, string.IsNullOrEmpty(prevHotkey) ? null : prevHotkey);
             SetHotkeyButton(CopyHotkeyButton, string.IsNullOrEmpty(prevCopy) ? null : prevCopy);
             SetHotkeyButton(PopupHotkeyButton, prevPopup);
@@ -350,8 +365,8 @@ public sealed partial class MainPage : Page
         if (!open)
             CancelHotkeyRecording(restore: true);
         SettingsScroller.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-        if (AppServices.Current.MainWindow is MainWindow win)
-            win.SetContentHeight(open);
+        // Wait a tick so DesiredSize includes the settings panel before we snap HWND height.
+        DispatcherQueue.TryEnqueue(SnapMainWindow);
     }
 
     private void OnAutostartToggled(object sender, RoutedEventArgs e) => PersistSettings();
@@ -381,7 +396,7 @@ public sealed partial class MainPage : Page
         _hotkeyRecordingPrevious = ReadHotkeyButton(btn);
         btn.Content = HotkeyRecordingLabel;
         btn.Focus(FocusState.Programmatic);
-        StatusText.Text = "请按下快捷键（Esc 取消，Backspace 清空）";
+        SetStatus("请按下快捷键（Esc 取消，Backspace 清空）");
 
         // Global RegisterHotKey would swallow the chord (e.g. F4) before the UI
         // sees it — drop hooks while recording, then restore via PersistSettings.
@@ -445,7 +460,7 @@ public sealed partial class MainPage : Page
             if (vk == 0x1B) // Esc
             {
                 CancelHotkeyRecording(restore: true);
-                StatusText.Text = "";
+                SetStatus("");
                 return;
             }
 
@@ -457,7 +472,7 @@ public sealed partial class MainPage : Page
                 _hotkeyRecordingButton = null;
                 _hotkeyRecordingPrevious = null;
                 PersistSettings();
-                StatusText.Text = "已清空热键";
+                SetStatus("已清空热键");
                 return;
             }
 
@@ -475,7 +490,7 @@ public sealed partial class MainPage : Page
             _hotkeyRecordingButton = null;
             _hotkeyRecordingPrevious = null;
             PersistSettings();
-            StatusText.Text = "热键已设为 " + combo;
+            SetStatus("热键已设为 " + combo);
         }
 
         // Function keys first — the usual screenshot chords.
@@ -535,12 +550,12 @@ public sealed partial class MainPage : Page
         {
             var outcome = await _services.Updates.CheckAsync();
             ApplyUpdateOutcome(outcome);
-            StatusText.Text = outcome.Kind switch
+            SetStatus(outcome.Kind switch
             {
                 UpdateCheckKind.UpdateAvailable => $"发现新版本 v{outcome.RemoteVersion}，点击「立即更新并重启」安装",
                 UpdateCheckKind.Failed => outcome.Message.Split('\n')[0],
                 _ => "已是最新版本",
-            };
+            });
         }
         finally
         {
@@ -570,20 +585,20 @@ public sealed partial class MainPage : Page
         CheckUpdateButton.IsEnabled = false;
         ApplyUpdateButton.IsEnabled = false;
         UpdateStatusText.Text = "正在下载更新…";
-        StatusText.Text = "正在下载更新…";
+        SetStatus("正在下载更新…");
         var progress = new Progress<int>(p =>
         {
             DispatcherQueue.TryEnqueue(() =>
             {
                 UpdateStatusText.Text = $"正在下载更新… {p}%";
-                StatusText.Text = $"正在下载更新… {p}%";
+                SetStatus($"正在下载更新… {p}%");
             });
         });
 
         var result = await _services.Updates.DownloadAndApplyAsync(progress);
         // ApplyUpdatesAndRestart exits the process on success; only failures reach here.
         UpdateStatusText.Text = result.Message;
-        StatusText.Text = result.Message;
+        SetStatus(result.Message);
         CheckUpdateButton.IsEnabled = true;
         ApplyUpdateButton.IsEnabled = true;
     }
@@ -654,7 +669,7 @@ public sealed partial class MainPage : Page
         }
         catch (Exception ex)
         {
-            StatusText.Text = "朗读失败: " + ex.Message;
+            SetStatus("朗读失败: " + ex.Message);
             ResetTtsButtons();
         }
     }
@@ -716,12 +731,12 @@ public sealed partial class MainPage : Page
                 text, LangValue(FromLangBox), LangValue(ToLangBox), _settings);
             if (seq != _translateSeq) return;
             OutputBox.Text = result.TranslatedText;
-            StatusText.Text = "";
+            SetStatus("");
         }
         catch (Exception ex)
         {
             if (seq != _translateSeq) return;
-            StatusText.Text = "翻译失败: " + ex.Message;
+            SetStatus("翻译失败: " + ex.Message);
         }
     }
 }
