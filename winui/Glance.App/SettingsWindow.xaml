@@ -13,6 +13,18 @@
         <TitleBar x:Name="AppTitleBar" Title="设置" />
         <ScrollViewer Grid.Row="1" Padding="16,8,16,16">
             <StackPanel Spacing="12" MaxWidth="480">
+                <ToggleSwitch
+                    x:Name="WordCaptureSwitch"
+                    Header="划词取词"
+                    OffContent="关"
+                    OnContent="开"
+                    Toggled="OnToggle" />
+                <TextBlock
+                    Opacity="0.65"
+                    FontSize="12"
+                    TextWrapping="Wrap"
+                    Text="拖选单词弹出词典。浏览器用复制取词；终端/IDE 用屏幕识字（需联网），不会发送 Ctrl+C。主窗口工具栏也可开关。" />
+
                 <TextBlock Text="文本引擎" />
                 <StackPanel Orientation="Horizontal" Spacing="12">
                     <RadioButton x:Name="EngineBing" Content="必应" GroupName="Engine" Checked="OnEngineChanged" />
@@ -39,18 +51,6 @@
                         TextWrapping="Wrap"
                         Text="下载一次即可。必应/AI 失败或断网时自动改用离线，无需切换引擎。截屏 OCR 仍需联网。" />
                 </StackPanel>
-
-                <ToggleSwitch
-                    x:Name="WordCaptureSwitch"
-                    Header="划词取词"
-                    OffContent="关"
-                    OnContent="开"
-                    Toggled="OnToggle" />
-                <TextBlock
-                    Opacity="0.65"
-                    FontSize="12"
-                    TextWrapping="Wrap"
-                    Text="在其他应用里拖选单词后弹出释义（类似有道划词）。" />
 
                 <TextBlock Text="代理" />
                 <StackPanel Orientation="Horizontal" Spacing="8">

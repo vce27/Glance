@@ -259,7 +259,7 @@ public sealed partial class SettingsWindow : Window
     {
         Persist();
         if (ReferenceEquals(sender, WordCaptureSwitch))
-            _services.ApplyWordCapture(_services.Store.LoadSettings().WordCaptureEnabled);
+            _services.ApplyWordCapture(WordCaptureSwitch.IsOn);
     }
 
     private void OnLlmApiKeyChanged(object sender, RoutedEventArgs e)

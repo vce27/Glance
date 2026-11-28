@@ -116,7 +116,9 @@ public sealed class AppServices
         ApplyAutostart(settings.Autostart);
         ReregisterHotkeys(settings);
         ApplyWordCapture(settings.WordCaptureEnabled);
+        _wordCapture.TryOcrRegionAsync = OcrDragRegionAsync;
         _wordCapture.SelectionCaptured += OnWordSelectionCaptured;
+        _wordCapture.PointerDown += OnWordCapturePointerDown;
 
         _tray = new TrayIconHost(
             show: ShowMainWindow,
@@ -200,6 +202,27 @@ public sealed class AppServices
     public void ApplyWordCapture(bool enabled)
         => _wordCapture.SetEnabled(enabled);
 
+    private async Task<string?> OcrDragRegionAsync(int x0, int y0, int x1, int y1)
+    {
+        try
+        {
+            var png = MonitorCapture.CaptureRegionPng(x0, y0, x1, y1);
+            var settings = Store.LoadSettings();
+            var resp = await Youdao.TranslateImageAsync(
+                png, "word.png", "image/png",
+                settings.FromLang, settings.ToLang, settings);
+            var parts = resp.Pairs
+                .Select(p => (p.Source ?? "").Trim())
+                .Where(s => s.Length > 0);
+            var text = string.Join(" ", parts);
+            return string.IsNullOrWhiteSpace(text) ? null : text;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private void OnWordSelectionCaptured(string text, int screenX, int screenY)
     {
         MainWindow?.DispatcherQueue.TryEnqueue(() =>
@@ -207,6 +230,13 @@ public sealed class AppServices
             _wordCaptureWindow ??= new WordCaptureWindow();
             _wordCaptureWindow.ShowLookup(text, screenX, screenY);
         });
+    }
+
+    private void OnWordCapturePointerDown(int screenX, int screenY)
+    {
+        // Terminal OCR popups often never get focus, so Deactivated never fires.
+        MainWindow?.DispatcherQueue.TryEnqueue(() =>
+            _wordCaptureWindow?.DismissIfOutside(screenX, screenY));
     }
 
     public void SuspendHotkeys() => _hotkeys.UnregisterAll();

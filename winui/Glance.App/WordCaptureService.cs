@@ -48,10 +48,21 @@ internal sealed class WordCaptureService : IDisposable
     private volatile bool _enabled;
     private volatile bool _stop;
     private int _downX, _downY;
+    private int _dragX0, _dragY0;
     private bool _down;
     private long _lastFireMs;
+    private int _captureSeq;
 
     public event Action<string, int, int>? SelectionCaptured;
+
+    /// <summary>Any left-button down while capture is enabled (for dismissing the popup).</summary>
+    public event Action<int, int>? PointerDown;
+
+    /// <summary>
+    /// Fallback when clipboard/UIA cannot read selection (terminals).
+    /// Args: drag start/end screen coords → OCR text or null.
+    /// </summary>
+    public Func<int, int, int, int, Task<string?>>? TryOcrRegionAsync { get; set; }
 
     public void SetEnabled(bool enabled)
     {
@@ -136,6 +147,9 @@ internal sealed class WordCaptureService : IDisposable
                 _down = true;
                 _downX = info.pt.X;
                 _downY = info.pt.Y;
+                // Invalidate in-flight OCR so a late result cannot reopen a dismissed popup.
+                Interlocked.Increment(ref _captureSeq);
+                try { PointerDown?.Invoke(info.pt.X, info.pt.Y); } catch { /* ignore */ }
             }
             else if (msg == WmLButtonUp && _down)
             {
@@ -144,6 +158,8 @@ internal sealed class WordCaptureService : IDisposable
                 var dy = Math.Abs(info.pt.Y - _downY);
                 if (dx >= MinDragPx || dy >= MinDragPx)
                 {
+                    _dragX0 = _downX;
+                    _dragY0 = _downY;
                     // UIA COM requires STA — post back to this hook thread (not the MTA pool).
                     PostThreadMessage(
                         unchecked((int)_threadId), WmAppCapture, (IntPtr)info.pt.X, (IntPtr)info.pt.Y);
@@ -190,20 +206,56 @@ internal sealed class WordCaptureService : IDisposable
             if (string.IsNullOrWhiteSpace(text) && allowCtrlC)
                 text = StealSelectionText();
 
-            if (string.IsNullOrWhiteSpace(text))
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                FireIfValid(text, screenX, screenY);
                 return;
-            text = Normalize(text);
-            if (text.Length is 0 or > MaxChars)
-                return;
-            if (!WordLike.IsMatch(text) && !LooksChinese(text))
-                return;
+            }
 
-            SelectionCaptured?.Invoke(text, screenX, screenY);
+            // Terminals / Electron shells: no Ctrl+C — OCR the drag band (有道划词同思路).
+            if (TryOcrRegionAsync is null) return;
+            var x0 = _dragX0;
+            var y0 = _dragY0;
+            var x1 = screenX;
+            var y1 = screenY;
+            var seq = Interlocked.Increment(ref _captureSeq);
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var ocr = await TryOcrRegionAsync(x0, y0, x1, y1).ConfigureAwait(false);
+                    if (seq != Volatile.Read(ref _captureSeq)) return;
+                    if (string.IsNullOrWhiteSpace(ocr)) return;
+                    FireIfValid(ocr, x1, y1);
+                }
+                catch
+                {
+                    // Ignore OCR failures.
+                }
+            });
         }
         catch
         {
             // Ignore capture failures.
         }
+    }
+
+    private void FireIfValid(string text, int screenX, int screenY)
+    {
+        text = Normalize(text);
+        if (text.Length is 0 or > MaxChars) return;
+        // OCR may return a short phrase — take the first token if the whole line fails WordLike.
+        if (!WordLike.IsMatch(text) && !LooksChinese(text))
+        {
+            var token = text.Split([' ', '\t', '|', '｜', '·'], StringSplitOptions.RemoveEmptyEntries)
+                .FirstOrDefault();
+            if (token is null) return;
+            text = token.Trim();
+            if (text.Length is 0 or > MaxChars) return;
+            if (!WordLike.IsMatch(text) && !LooksChinese(text)) return;
+        }
+
+        SelectionCaptured?.Invoke(text, screenX, screenY);
     }
 
     private static string Normalize(string text)

@@ -2,21 +2,22 @@ using Glance.Core;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Windows.Graphics;
-using WinRT.Interop;
 
 namespace Glance.App;
 
 public sealed partial class WordCaptureWindow : Window
 {
-
     private readonly YoudaoDictClient _dict = new();
+    private readonly DispatcherTimer _autoHide = new() { Interval = TimeSpan.FromSeconds(8) };
     private int _lookupSeq;
+    private long _shownAtMs;
 
     public WordCaptureWindow()
     {
         InitializeComponent();
         ExtendsContentIntoTitleBar = true;
-        SystemBackdrop = new Microsoft.UI.Xaml.Media.MicaBackdrop();
+        // Opaque float — Mica/Acrylic lets terminal text bleed through as "残留".
+        SystemBackdrop = null;
         try { AppWindow.SetIcon(AppIconLoader.IconPath); } catch { /* optional */ }
         if (AppWindow.Presenter is OverlappedPresenter p)
         {
@@ -32,6 +33,7 @@ public sealed partial class WordCaptureWindow : Window
             if (args.WindowActivationState == WindowActivationState.Deactivated)
                 HideQuiet();
         };
+        _autoHide.Tick += (_, _) => HideQuiet();
     }
 
     public void ShowLookup(string text, int screenX, int screenY)
@@ -44,9 +46,31 @@ public sealed partial class WordCaptureWindow : Window
 
         PositionNear(screenX, screenY);
         try { AppWindow.Show(); } catch { /* ignore */ }
-        Activate();
+        try { Activate(); } catch { /* OCR path often cannot steal focus */ }
+
+        _shownAtMs = Environment.TickCount64;
+        _autoHide.Stop();
+        _autoHide.Start();
 
         _ = LookupAsync(text, seq);
+    }
+
+    /// <summary>
+    /// OCR/终端场景下窗口常常拿不到焦点，Deactivated 不会来——靠全局鼠标按下关闭。
+    /// </summary>
+    public void DismissIfOutside(int screenX, int screenY)
+    {
+        if (!AppWindow.IsVisible) return;
+        // Ignore the click/drag that just opened us.
+        if (Environment.TickCount64 - _shownAtMs < 450) return;
+
+        var pos = AppWindow.Position;
+        var size = AppWindow.Size;
+        if (screenX >= pos.X && screenX < pos.X + size.Width
+            && screenY >= pos.Y && screenY < pos.Y + size.Height)
+            return;
+
+        HideQuiet();
     }
 
     private async Task LookupAsync(string text, int seq)
@@ -118,6 +142,7 @@ public sealed partial class WordCaptureWindow : Window
 
     public void HideQuiet()
     {
+        _autoHide.Stop();
         try { AppWindow.Hide(); } catch { /* ignore */ }
     }
 }

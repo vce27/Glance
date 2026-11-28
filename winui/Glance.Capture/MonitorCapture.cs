@@ -58,4 +58,30 @@ public static class MonitorCapture
         crop.Save(ms, ImageFormat.Png);
         return ms.ToArray();
     }
+
+    /// <summary>Grab a screen rectangle (screen coords) as PNG — used for terminal 划词 OCR.</summary>
+    public static byte[] CaptureRegionPng(int x0, int y0, int x1, int y1, int pad = 6)
+    {
+        var left = Math.Min(x0, x1) - pad;
+        var top = Math.Min(y0, y1) - pad;
+        var right = Math.Max(x0, x1) + pad;
+        var bottom = Math.Max(y0, y1) + pad;
+        // Single-line selections are often flat — ensure a readable band for OCR.
+        if (bottom - top < 28)
+        {
+            var mid = (top + bottom) / 2;
+            top = mid - 14;
+            bottom = mid + 14;
+        }
+        if (right - left < 24) right = left + 24;
+
+        var w = Math.Max(1, right - left);
+        var h = Math.Max(1, bottom - top);
+        using var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
+        using (var g = Graphics.FromImage(bmp))
+            g.CopyFromScreen(left, top, 0, 0, new Size(w, h), CopyPixelOperation.SourceCopy);
+        using var ms = new MemoryStream();
+        bmp.Save(ms, ImageFormat.Png);
+        return ms.ToArray();
+    }
 }

@@ -101,6 +101,7 @@ public sealed partial class MainPage : Page
         _settings = _services.Store.LoadSettings();
         SelectLang(FromLangBox, _settings.FromLang);
         SelectLang(ToLangBox, _settings.ToLang);
+        WordCaptureButton.IsChecked = _settings.WordCaptureEnabled;
         PinButton.IsChecked = _settings.PinOnTop;
         UpdateThemeButtonGlyph();
         RefreshToolbarTooltips();
@@ -149,6 +150,7 @@ public sealed partial class MainPage : Page
     {
         var s = _services.Store.LoadSettings();
         ToolTipService.SetToolTip(SwapLangButton, "交换语言");
+        ToolTipService.SetToolTip(WordCaptureButton, s.WordCaptureEnabled ? "划词取词：开" : "划词取词：关");
         ToolTipService.SetToolTip(PinButton, "置顶窗口");
         ToolTipService.SetToolTip(CaptureButton, Tip("截屏翻译", s.Hotkey));
         ToolTipService.SetToolTip(WordbookButton, "生词本");
@@ -262,6 +264,18 @@ public sealed partial class MainPage : Page
         ToolTipService.SetToolTip(ThemeButton, dark ? "切换到浅色主题" : "切换到深色主题");
     }
 
+    private void OnWordCaptureToggle(object sender, RoutedEventArgs e)
+    {
+        var on = WordCaptureButton.IsChecked == true;
+        var s = _services.Store.LoadSettings();
+        s.WordCaptureEnabled = on;
+        _services.Store.SaveSettings(s);
+        _settings = s;
+        _services.ApplyWordCapture(on);
+        ToolTipService.SetToolTip(WordCaptureButton, on ? "划词取词：开" : "划词取词：关");
+        SetStatus(on ? "划词取词已开启" : "划词取词已关闭");
+    }
+
     private void OnSettingsClick(object sender, RoutedEventArgs e)
     {
         _services.ShowSettingsWindow();
@@ -269,6 +283,7 @@ public sealed partial class MainPage : Page
         DispatcherQueue.TryEnqueue(() =>
         {
             _settings = _services.Store.LoadSettings();
+            WordCaptureButton.IsChecked = _settings.WordCaptureEnabled;
             RefreshToolbarTooltips();
             ClearStatus();
         });

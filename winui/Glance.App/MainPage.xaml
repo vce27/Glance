@@ -68,6 +68,13 @@
                 Orientation="Horizontal"
                 Spacing="2">
                 <ToggleButton
+                    x:Name="WordCaptureButton"
+                    Click="OnWordCaptureToggle"
+                    Style="{StaticResource GlanceToolbarToggleStyle}"
+                    ToolTipService.ToolTip="划词取词">
+                    <FontIcon FontFamily="Segoe Fluent Icons" FontSize="15" Glyph="&#xE8D2;" />
+                </ToggleButton>
+                <ToggleButton
                     x:Name="PinButton"
                     Click="OnPinClick"
                     Style="{StaticResource GlanceToolbarToggleStyle}"
