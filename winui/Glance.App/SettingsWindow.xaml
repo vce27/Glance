@@ -17,7 +17,40 @@
                 <StackPanel Orientation="Horizontal" Spacing="12">
                     <RadioButton x:Name="EngineBing" Content="必应" GroupName="Engine" Checked="OnEngineChanged" />
                     <RadioButton x:Name="EngineLlm" Content="AI 大模型" GroupName="Engine" Checked="OnEngineChanged" />
+                    <RadioButton x:Name="EngineOffline" Content="仅离线" GroupName="Engine" Checked="OnEngineChanged" />
                 </StackPanel>
+                <StackPanel x:Name="OfflinePanel" Spacing="6">
+                    <TextBlock
+                        x:Name="OfflinePackStatusText"
+                        Opacity="0.85"
+                        TextWrapping="Wrap"
+                        Text="未安装语言包" />
+                    <ProgressBar
+                        x:Name="OfflinePackProgress"
+                        Maximum="100"
+                        Visibility="Collapsed" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button x:Name="OfflinePackDownloadButton" Content="下载英↔中语言包" Click="OnOfflinePackDownloadClick" />
+                        <Button x:Name="OfflinePackDeleteButton" Content="删除" Click="OnOfflinePackDeleteClick" />
+                    </StackPanel>
+                    <TextBlock
+                        Opacity="0.65"
+                        FontSize="12"
+                        TextWrapping="Wrap"
+                        Text="下载一次即可。必应/AI 失败或断网时自动改用离线，无需切换引擎。截屏 OCR 仍需联网。" />
+                </StackPanel>
+
+                <ToggleSwitch
+                    x:Name="WordCaptureSwitch"
+                    Header="划词取词"
+                    OffContent="关"
+                    OnContent="开"
+                    Toggled="OnToggle" />
+                <TextBlock
+                    Opacity="0.65"
+                    FontSize="12"
+                    TextWrapping="Wrap"
+                    Text="在其他应用里拖选单词后弹出释义（类似有道划词）。" />
 
                 <TextBlock Text="代理" />
                 <StackPanel Orientation="Horizontal" Spacing="8">

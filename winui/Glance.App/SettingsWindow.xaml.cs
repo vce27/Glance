@@ -46,6 +46,7 @@ public sealed partial class SettingsWindow : Window
         _settings = _services.Store.LoadSettings();
         AutostartSwitch.IsOn = _settings.Autostart;
         CompareOverlaySwitch.IsOn = _settings.ShowCompareOverlay;
+        WordCaptureSwitch.IsOn = _settings.WordCaptureEnabled;
         AutoUpdateSwitch.IsOn = _settings.AutoCheckUpdates;
         SetHotkeyButton(HotkeyButton, HotkeyParser.Canonicalize(_settings.Hotkey));
         SetHotkeyButton(CopyHotkeyButton, HotkeyParser.Canonicalize(_settings.CopyHotkey));
@@ -56,15 +57,30 @@ public sealed partial class SettingsWindow : Window
         LlmModelBox.Text = _settings.LlmConfig.Model;
         if (_settings.TextTranslateEngine == TextTranslateEngine.Llm)
             EngineLlm.IsChecked = true;
+        else if (_settings.TextTranslateEngine == TextTranslateEngine.Offline)
+            EngineOffline.IsChecked = true;
         else
             EngineBing.IsChecked = true;
         ApplyProxyUi();
         LlmPanel.Visibility = _settings.TextTranslateEngine == TextTranslateEngine.Llm
             ? Visibility.Visible
             : Visibility.Collapsed;
+        RefreshOfflinePackUi();
         UpdateStatusText.Text = $"当前版本 {_services.Updates.CurrentVersionDisplay}";
         ApplyUpdateButton.Visibility = Visibility.Collapsed;
         _loadingUi = false;
+    }
+
+    private void RefreshOfflinePackUi()
+    {
+        var pack = _services.Translator.Offline.Pack;
+        var installed = pack.IsInstalled();
+        OfflinePackStatusText.Text = installed
+            ? "语言包已安装 · 断网自动启用"
+            : "未安装语言包（可选，约 390MB）";
+        OfflinePackDownloadButton.Content = installed ? "重新下载语言包" : "下载英↔中语言包";
+        OfflinePackDeleteButton.IsEnabled = installed;
+        OfflinePackProgress.Visibility = Visibility.Collapsed;
     }
 
     private void ApplyProxyUi()
@@ -98,6 +114,7 @@ public sealed partial class SettingsWindow : Window
 
         prev.Autostart = AutostartSwitch.IsOn;
         prev.ShowCompareOverlay = CompareOverlaySwitch.IsOn;
+        prev.WordCaptureEnabled = WordCaptureSwitch.IsOn;
         prev.CustomProxy = CustomProxyBox.Text.Trim();
         prev.LlmConfig.BaseUrl = LlmBaseUrlBox.Text.Trim();
         prev.LlmConfig.ApiKey = LlmApiKeyBox.Password;
@@ -105,7 +122,9 @@ public sealed partial class SettingsWindow : Window
         prev.AutoCheckUpdates = AutoUpdateSwitch.IsOn;
         prev.TextTranslateEngine = EngineLlm.IsChecked == true
             ? TextTranslateEngine.Llm
-            : TextTranslateEngine.Bing;
+            : EngineOffline.IsChecked == true
+                ? TextTranslateEngine.Offline
+                : TextTranslateEngine.Bing;
         if (ProxyCustom.IsChecked == true) prev.ProxyMode = ProxyMode.Custom;
         else if (ProxyNone.IsChecked == true) prev.ProxyMode = ProxyMode.None;
         else prev.ProxyMode = ProxyMode.System;
@@ -189,6 +208,44 @@ public sealed partial class SettingsWindow : Window
         Persist();
     }
 
+    private async void OnOfflinePackDownloadClick(object sender, RoutedEventArgs e)
+    {
+        OfflinePackDownloadButton.IsEnabled = false;
+        OfflinePackDeleteButton.IsEnabled = false;
+        OfflinePackProgress.Visibility = Visibility.Visible;
+        OfflinePackProgress.Value = 0;
+        OfflinePackStatusText.Text = "正在下载语言包…";
+        try
+        {
+            var progress = new Progress<OfflineMtProgress>(p =>
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    OfflinePackProgress.Value = p.Percent;
+                    OfflinePackStatusText.Text = p.Message;
+                }));
+            await _services.Translator.Offline.Pack.InstallAsync(null, progress);
+            SetLocalStatus("离线语言包已安装");
+        }
+        catch (Exception ex)
+        {
+            OfflinePackStatusText.Text = "下载失败: " + ex.Message;
+            SetLocalStatus("语言包下载失败");
+        }
+        finally
+        {
+            OfflinePackDownloadButton.IsEnabled = true;
+            RefreshOfflinePackUi();
+        }
+    }
+
+    private void OnOfflinePackDeleteClick(object sender, RoutedEventArgs e)
+    {
+        _services.Translator.Offline.Pack.Uninstall();
+        _services.Translator.ResetOffline();
+        RefreshOfflinePackUi();
+        SetLocalStatus("已删除离线语言包");
+    }
+
     private void OnProxyChanged(object sender, RoutedEventArgs e)
     {
         if (_loadingUi) return;
@@ -197,7 +254,13 @@ public sealed partial class SettingsWindow : Window
     }
 
     private void OnFieldCommit(object sender, RoutedEventArgs e) => Persist();
-    private void OnToggle(object sender, RoutedEventArgs e) => Persist();
+
+    private void OnToggle(object sender, RoutedEventArgs e)
+    {
+        Persist();
+        if (ReferenceEquals(sender, WordCaptureSwitch))
+            _services.ApplyWordCapture(_services.Store.LoadSettings().WordCaptureEnabled);
+    }
 
     private void OnLlmApiKeyChanged(object sender, RoutedEventArgs e)
     {

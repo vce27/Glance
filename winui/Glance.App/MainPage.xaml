@@ -103,7 +103,7 @@
             </StackPanel>
         </Grid>
 
-        <!-- Source / target panes -->
+        <!-- Source / target panes: one card each, text fills, actions as footer -->
         <Grid Grid.Row="1" ColumnSpacing="10">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
@@ -111,63 +111,53 @@
             </Grid.ColumnDefinitions>
 
             <Border
+                MinHeight="112"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1"
                 CornerRadius="8">
-                <Grid Padding="10,8,8,6" RowSpacing="4">
+                <Grid Padding="12,10,10,6" RowSpacing="2">
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <Grid>
-                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                            <TextBlock FontSize="12" FontWeight="SemiBold" Text="原文" />
-                            <TextBlock
-                                x:Name="InputMetaText"
-                                FontSize="11"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="自动识别"
-                                VerticalAlignment="Center" />
-                        </StackPanel>
-                        <Button
-                            x:Name="InputClearButton"
-                            HorizontalAlignment="Right"
-                            Click="OnClearInputClick"
-                            Style="{StaticResource GlancePaneActionButtonStyle}"
-                            ToolTipService.ToolTip="清空">
-                            <FontIcon FontFamily="Segoe Fluent Icons" FontSize="12" Glyph="&#xE711;" />
-                        </Button>
-                    </Grid>
-                    <ScrollViewer
+                    <TextBox
+                        x:Name="InputBox"
+                        MaxHeight="160"
+                        PlaceholderText="输入或粘贴要翻译的文本…"
+                        Style="{StaticResource GlancePaneTextBoxStyle}"
+                        TextChanged="OnInputChanged">
+                        <TextBox.Resources>
+                            <SolidColorBrush x:Key="TextControlBackground" Color="Transparent" />
+                            <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="Transparent" />
+                            <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="Transparent" />
+                            <SolidColorBrush x:Key="TextControlBackgroundDisabled" Color="Transparent" />
+                            <SolidColorBrush x:Key="TextControlBorderBrush" Color="Transparent" />
+                            <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="Transparent" />
+                            <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="Transparent" />
+                            <SolidColorBrush x:Key="TextControlBorderBrushDisabled" Color="Transparent" />
+                        </TextBox.Resources>
+                    </TextBox>
+                    <TextBlock
+                        x:Name="InputPinyinText"
                         Grid.Row="1"
-                        MaxHeight="140"
-                        VerticalScrollBarVisibility="Auto">
-                        <StackPanel Spacing="4">
-                            <TextBox
-                                x:Name="InputBox"
-                                MinHeight="44"
-                                AcceptsReturn="True"
-                                BorderThickness="0"
-                                FontSize="16"
-                                Padding="0"
-                                PlaceholderText="输入或粘贴要翻译的文本…"
-                                TextChanged="OnInputChanged"
-                                TextWrapping="Wrap" />
-                            <TextBlock
-                                x:Name="InputPinyinText"
-                                FontSize="12"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                TextWrapping="Wrap"
-                                Visibility="Collapsed" />
-                        </StackPanel>
-                    </ScrollViewer>
+                        FontSize="12"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        TextWrapping="Wrap"
+                        Visibility="Collapsed" />
                     <StackPanel
                         Grid.Row="2"
                         HorizontalAlignment="Right"
                         Orientation="Horizontal"
                         Spacing="2">
+                        <Button
+                            x:Name="InputClearButton"
+                            Click="OnClearInputClick"
+                            Style="{StaticResource GlancePaneActionButtonStyle}"
+                            ToolTipService.ToolTip="清空">
+                            <FontIcon FontFamily="Segoe Fluent Icons" FontSize="12" Glyph="&#xE711;" />
+                        </Button>
                         <Button
                             x:Name="InputCopyButton"
                             Click="OnCopyClick"
@@ -195,48 +185,41 @@
 
             <Border
                 Grid.Column="1"
+                MinHeight="112"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1"
                 CornerRadius="8">
-                <Grid Padding="10,8,8,6" RowSpacing="4">
+                <Grid Padding="12,10,10,6" RowSpacing="2">
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                        <TextBlock FontSize="12" FontWeight="SemiBold" Text="译文" />
-                        <TextBlock
-                            x:Name="OutputMetaText"
-                            FontSize="11"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Text=""
-                            VerticalAlignment="Center" />
-                    </StackPanel>
-                    <ScrollViewer
+                    <TextBox
+                        x:Name="OutputBox"
+                        MaxHeight="160"
+                        IsReadOnly="True"
+                        PlaceholderText=""
+                        Style="{StaticResource GlancePaneTextBoxStyle}">
+                        <TextBox.Resources>
+                            <SolidColorBrush x:Key="TextControlBackground" Color="Transparent" />
+                            <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="Transparent" />
+                            <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="Transparent" />
+                            <SolidColorBrush x:Key="TextControlBackgroundDisabled" Color="Transparent" />
+                            <SolidColorBrush x:Key="TextControlBorderBrush" Color="Transparent" />
+                            <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="Transparent" />
+                            <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="Transparent" />
+                            <SolidColorBrush x:Key="TextControlBorderBrushDisabled" Color="Transparent" />
+                        </TextBox.Resources>
+                    </TextBox>
+                    <TextBlock
+                        x:Name="OutputPinyinText"
                         Grid.Row="1"
-                        MaxHeight="140"
-                        VerticalScrollBarVisibility="Auto">
-                        <StackPanel Spacing="4">
-                            <TextBox
-                                x:Name="OutputBox"
-                                MinHeight="44"
-                                AcceptsReturn="True"
-                                BorderThickness="0"
-                                FontSize="16"
-                                IsReadOnly="True"
-                                Padding="0"
-                                PlaceholderText="译文"
-                                TextWrapping="Wrap" />
-                            <TextBlock
-                                x:Name="OutputPinyinText"
-                                FontSize="12"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                TextWrapping="Wrap"
-                                Visibility="Collapsed" />
-                        </StackPanel>
-                    </ScrollViewer>
+                        FontSize="12"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        TextWrapping="Wrap"
+                        Visibility="Collapsed" />
                     <StackPanel
                         Grid.Row="2"
                         HorizontalAlignment="Right"
@@ -328,7 +311,7 @@
             Grid.Row="3"
             FontSize="11"
             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-            Text="就绪"
-            TextWrapping="Wrap" />
+            TextWrapping="Wrap"
+            Visibility="Collapsed" />
     </Grid>
 </Page>

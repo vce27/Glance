@@ -14,3 +14,7 @@ winui/publish/
 .vs/
 *.user
 .codegraph/
+
+# Offline MT pack build artifacts (large ONNX models)
+packaging/offline-mt/staging/
+packaging/offline-mt/*.zip

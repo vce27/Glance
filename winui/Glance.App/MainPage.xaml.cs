@@ -104,8 +104,7 @@ public sealed partial class MainPage : Page
         PinButton.IsChecked = _settings.PinOnTop;
         UpdateThemeButtonGlyph();
         RefreshToolbarTooltips();
-        UpdatePaneMeta();
-        SetStatus(ReadyStatus());
+        ClearStatus();
         _services.ApplyPin(_settings.PinOnTop);
         _services.StatusChanged += msg => DispatcherQueue.TryEnqueue(() => SetStatus(msg));
         _services.CaptureCompleted += result => DispatcherQueue.TryEnqueue(() => ApplyCaptureResult(result));
@@ -119,18 +118,32 @@ public sealed partial class MainPage : Page
 
     private void SetStatus(string? message)
     {
-        var text = string.IsNullOrWhiteSpace(message) ? ReadyStatus() : message!;
-        StatusText.Text = text;
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            ClearStatus();
+            return;
+        }
+
+        StatusText.Text = message;
         StatusText.Visibility = Visibility.Visible;
         if (AppServices.Current.MainWindow is MainWindow win)
             win.SnapToContent();
     }
 
-    private string ReadyStatus()
+    private void ClearStatus()
     {
-        var engine = _settings.TextTranslateEngine == TextTranslateEngine.Llm ? "AI 大模型" : "必应";
-        return $"就绪 · {engine}";
+        StatusText.Text = "";
+        StatusText.Visibility = Visibility.Collapsed;
+        if (AppServices.Current.MainWindow is MainWindow win)
+            win.SnapToContent();
     }
+
+    private string EngineLabel(TextTranslateEngine engine) => engine switch
+    {
+        TextTranslateEngine.Llm => "AI 大模型",
+        TextTranslateEngine.Offline => "仅离线",
+        _ => _services.Translator.Offline.Pack.IsInstalled() ? "必应（可离线备用）" : "必应",
+    };
 
     private void RefreshToolbarTooltips()
     {
@@ -176,15 +189,6 @@ public sealed partial class MainPage : Page
         _settings = s;
         _services.Store.SaveSettings(s);
         RefreshToolbarTooltips();
-        UpdatePaneMeta();
-    }
-
-    private void UpdatePaneMeta()
-    {
-        var from = LangValue(FromLangBox);
-        InputMetaText.Text = from == "auto" ? "自动识别" : LangLabel(FromLangBox);
-        if (string.IsNullOrWhiteSpace(OutputBox.Text))
-            OutputMetaText.Text = "";
     }
 
     private void OnLangChanged(object sender, SelectionChangedEventArgs e)
@@ -266,7 +270,7 @@ public sealed partial class MainPage : Page
         {
             _settings = _services.Store.LoadSettings();
             RefreshToolbarTooltips();
-            SetStatus(ReadyStatus());
+            ClearStatus();
         });
     }
 
@@ -335,7 +339,6 @@ public sealed partial class MainPage : Page
         if (!string.IsNullOrWhiteSpace(target))
         {
             OutputBox.Text = target;
-            OutputMetaText.Text = "截屏识别";
             SetStatus("截屏翻译完成 · 有道 OCR");
         }
     }
@@ -437,8 +440,7 @@ public sealed partial class MainPage : Page
         ClearDict();
         SetSidePinyin(InputPinyinText, "");
         SetSidePinyin(OutputPinyinText, "");
-        OutputMetaText.Text = "";
-        SetStatus(ReadyStatus());
+        ClearStatus();
         InputBox.Focus(FocusState.Programmatic);
         if (AppServices.Current.MainWindow is MainWindow win)
             win.SnapToContent();
@@ -473,14 +475,13 @@ public sealed partial class MainPage : Page
             OutputBox.Text = "";
             ClearDict();
             SetSidePinyin(OutputPinyinText, "");
-            OutputMetaText.Text = "";
-            SetStatus(ReadyStatus());
+            ClearStatus();
             return;
         }
 
         var seq = ++_translateSeq;
         _ = RefreshDictAsync(text, seq);
-        var engine = _settings.TextTranslateEngine == TextTranslateEngine.Llm ? "AI 大模型" : "必应";
+        var engine = EngineLabel(_settings.TextTranslateEngine);
         try
         {
             PersistMainSettings();
@@ -493,8 +494,6 @@ public sealed partial class MainPage : Page
             sw.Stop();
             if (seq != _translateSeq) return;
             OutputBox.Text = result.TranslatedText;
-            var seconds = Math.Max(0.1, sw.Elapsed.TotalSeconds);
-            OutputMetaText.Text = $"翻译完成 · {seconds:0.0} 秒";
 
             var pinyin = result.Transliteration?.Trim() ?? "";
             if (string.IsNullOrEmpty(pinyin) && LooksChinese(result.TranslatedText))
@@ -510,12 +509,11 @@ public sealed partial class MainPage : Page
 
             if (seq != _translateSeq) return;
             ApplyOutputPinyin(result.TranslatedText, pinyin);
-            SetStatus($"{engine} · {seconds:0.0} 秒");
+            ClearStatus();
         }
         catch (Exception ex)
         {
             if (seq != _translateSeq) return;
-            OutputMetaText.Text = "翻译失败";
             SetStatus("翻译失败: " + ex.Message);
         }
     }
@@ -649,7 +647,6 @@ public sealed partial class MainPage : Page
         if (sender is not FrameworkElement { Tag: string alt } || string.IsNullOrWhiteSpace(alt))
             return;
         OutputBox.Text = alt;
-        OutputMetaText.Text = "其他表达";
         if (LooksChinese(alt) && !string.IsNullOrWhiteSpace(_phonetic) && !LooksChinese(InputBox.Text))
             SetSidePinyin(OutputPinyinText, _phonetic);
         else if (!LooksChinese(alt))

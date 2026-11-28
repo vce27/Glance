@@ -35,6 +35,8 @@ public sealed class AppServices
 
     private SettingsWindow? _settingsWindow;
     private WordbookWindow? _wordbookWindow;
+    private WordCaptureWindow? _wordCaptureWindow;
+    private readonly WordCaptureService _wordCapture = new();
     private readonly HotkeyWindow _hotkeys = new();
     private TrayIconHost? _tray;
     private Mutex? _singleInstance;
@@ -113,6 +115,8 @@ public sealed class AppServices
         ApplyPin(settings.PinOnTop);
         ApplyAutostart(settings.Autostart);
         ReregisterHotkeys(settings);
+        ApplyWordCapture(settings.WordCaptureEnabled);
+        _wordCapture.SelectionCaptured += OnWordSelectionCaptured;
 
         _tray = new TrayIconHost(
             show: ShowMainWindow,
@@ -123,6 +127,7 @@ public sealed class AppServices
         {
             // Close-to-tray handled in MainWindow; this is final exit.
             _hotkeys.UnregisterAll();
+            _wordCapture.Dispose();
             _tray?.Dispose();
         };
 
@@ -190,6 +195,18 @@ public sealed class AppServices
         var exe = Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule?.FileName;
         if (string.IsNullOrEmpty(exe)) return;
         AutostartHelper.Apply(enabled, exe);
+    }
+
+    public void ApplyWordCapture(bool enabled)
+        => _wordCapture.SetEnabled(enabled);
+
+    private void OnWordSelectionCaptured(string text, int screenX, int screenY)
+    {
+        MainWindow?.DispatcherQueue.TryEnqueue(() =>
+        {
+            _wordCaptureWindow ??= new WordCaptureWindow();
+            _wordCaptureWindow.ShowLookup(text, screenX, screenY);
+        });
     }
 
     public void SuspendHotkeys() => _hotkeys.UnregisterAll();
@@ -343,10 +360,12 @@ public sealed class AppServices
     public void Quit()
     {
         _hotkeys.UnregisterAll();
+        _wordCapture.Dispose();
         _tray?.Dispose();
         ReleaseSingleInstance();
         try { _settingsWindow?.Close(); } catch { /* ignore */ }
         try { _wordbookWindow?.Close(); } catch { /* ignore */ }
+        try { _wordCaptureWindow?.Close(); } catch { /* ignore */ }
         if (MainWindow is MainWindow win)
             win.AllowClose();
         Application.Current.Exit();

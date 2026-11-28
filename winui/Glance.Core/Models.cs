@@ -4,6 +4,7 @@ public enum TextTranslateEngine
 {
     Bing,
     Llm,
+    Offline,
 }
 
 public enum ProxyMode
@@ -39,6 +40,8 @@ public sealed class TranslatorSettings
     public bool AutoCheckUpdates { get; set; } = true;
     /// <summary>Show translation compare card under the screenshot selection.</summary>
     public bool ShowCompareOverlay { get; set; } = true;
+    /// <summary>Select text in other apps to show a dictionary popup (划词取词).</summary>
+    public bool WordCaptureEnabled { get; set; } = true;
 }
 
 public sealed class TranslationPair
@@ -68,6 +71,8 @@ public sealed class TextTranslationResult
     public string TranslatedText { get; set; } = "";
     /// <summary>Target-side romanization from Bing (Chinese pinyin, Japanese romaji, …).</summary>
     public string Transliteration { get; set; } = "";
+    /// <summary>Which engine produced this result (必应 / AI 大模型 / 离线).</summary>
+    public string SourceEngine { get; set; } = "";
 }
 
 public enum CaptureMode

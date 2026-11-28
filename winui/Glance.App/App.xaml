@@ -153,6 +153,19 @@
                 <Setter Property="Template" Value="{StaticResource GlanceGhostIconButtonTemplate}" />
             </Style>
 
+            <!-- Chrome-less pane editor: text sits in the card, no nested TextBox frame. -->
+            <Style x:Key="GlancePaneTextBoxStyle" TargetType="TextBox">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="FontSize" Value="15" />
+                <Setter Property="AcceptsReturn" Value="True" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="MinHeight" Value="72" />
+                <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+                <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+            </Style>
+
             <Style x:Key="GlanceToolbarToggleStyle" TargetType="ToggleButton">
                 <Setter Property="Background" Value="Transparent" />
                 <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />

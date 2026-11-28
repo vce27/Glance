@@ -6,28 +6,18 @@ namespace Glance.Core;
 public sealed class DictSense
 {
     public string Pos { get; init; } = "";
-    public string PosLabel { get; init; } = "";
     public string Meaning { get; init; } = "";
-}
-
-public sealed class DictPhrase
-{
-    public string Phrase { get; init; } = "";
-    public string Translation { get; init; } = "";
 }
 
 public sealed class DictLookup
 {
     public string Headword { get; init; } = "";
     public string Phonetic { get; init; } = "";
-    public string? SpeechWord { get; init; }
-    public string PosSummary { get; init; } = "";
     public IReadOnlyList<DictSense> Senses { get; init; } = [];
     public IReadOnlyList<string> Alternatives { get; init; } = [];
-    public IReadOnlyList<DictPhrase> Phrases { get; init; } = [];
 }
 
-/// <summary>Best-effort dict lookup via Youdao JSON (phonetic + senses + phrases).</summary>
+/// <summary>Best-effort dict lookup via Youdao JSON (phonetic + senses).</summary>
 public sealed class YoudaoDictClient
 {
     private static readonly HttpClient Http = new()
@@ -37,24 +27,6 @@ public sealed class YoudaoDictClient
     };
 
     private static readonly Regex WordLike = new(@"^[\p{L}\p{M}'’.\-]+$", RegexOptions.Compiled);
-
-    private static readonly Dictionary<string, string> PosNames = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["n."] = "名词",
-        ["v."] = "动词",
-        ["vt."] = "及物动词",
-        ["vi."] = "不及物动词",
-        ["adj."] = "形容词",
-        ["adv."] = "副词",
-        ["prep."] = "介词",
-        ["conj."] = "连词",
-        ["pron."] = "代词",
-        ["int."] = "感叹词",
-        ["num."] = "数词",
-        ["art."] = "冠词",
-        ["aux."] = "助动词",
-        ["modal v."] = "情态动词",
-    };
 
     public async Task<DictLookup?> LookupAsync(string text, CancellationToken ct = default)
     {
@@ -72,25 +44,22 @@ public sealed class YoudaoDictClient
         using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
         var root = doc.RootElement;
 
-        string? us = null, uk = null, phone = null, speech = null, head = text;
+        string? us = null, uk = null, phone = null, head = text;
         var senses = new List<DictSense>();
         var alts = new List<string>();
-        var phrases = new List<DictPhrase>();
 
         if (TryWord(root, "ec", out var ec))
         {
             us = Str(ec, "usphone");
             uk = Str(ec, "ukphone");
-            speech = Str(ec, "return-phrase") ?? text;
-            head = speech ?? text;
+            head = Str(ec, "return-phrase") ?? text;
             CollectEcSenses(ec, senses);
         }
 
         if (TryWord(root, "ce", out var ce))
         {
             phone ??= Str(ce, "phone");
-            speech ??= Str(ce, "return-phrase") ?? text;
-            head = speech ?? head;
+            head = Str(ce, "return-phrase") ?? head;
             CollectCeSenses(ce, senses, alts);
         }
 
@@ -103,46 +72,27 @@ public sealed class YoudaoDictClient
             us ??= Str(w, "usphone");
             uk ??= Str(w, "ukphone");
             phone ??= Str(w, "phone");
-            speech ??= Str(w, "return-phrase") ?? text;
+            head = Str(w, "return-phrase") ?? head;
         }
 
         CollectWebAlts(root, text, alts);
-        CollectPhrases(root, phrases);
 
         var phonetic = FormatPhonetic(us, uk, phone);
-        if (string.IsNullOrEmpty(phonetic) && senses.Count == 0 && alts.Count == 0 && phrases.Count == 0)
+        if (string.IsNullOrEmpty(phonetic) && senses.Count == 0 && alts.Count == 0)
             return null;
-
-        // Bing-style glance: few POS rows, each meaning clipped to the first couple of senses.
-        var shortSenses = senses
-            .Select(s => new DictSense
-            {
-                Pos = s.Pos,
-                PosLabel = s.PosLabel,
-                Meaning = ShortenMeaning(s.Meaning, 2),
-            })
-            .Take(3)
-            .ToList();
-
-        var posSummary = string.Join(" / ", shortSenses
-            .Select(s => s.PosLabel)
-            .Where(s => !string.IsNullOrWhiteSpace(s))
-            .Distinct()
-            .Take(4));
 
         return new DictLookup
         {
             Headword = head,
             Phonetic = phonetic,
-            SpeechWord = speech ?? text,
-            PosSummary = posSummary,
-            Senses = shortSenses,
+            Senses = senses
+                .Select(s => new DictSense { Pos = s.Pos, Meaning = ShortenMeaning(s.Meaning, 2) })
+                .Take(3)
+                .ToList(),
             Alternatives = DedupPreserve(alts, text).Take(5).ToList(),
-            Phrases = phrases.Take(4).ToList(),
         };
     }
 
-    /// <summary>Keep only the first N semicolon-separated glosses (Bing-style brevity).</summary>
     private static string ShortenMeaning(string meaning, int maxParts)
     {
         if (string.IsNullOrWhiteSpace(meaning) || maxParts <= 0) return meaning;
@@ -178,15 +128,9 @@ public sealed class YoudaoDictClient
             var pos = (Str(t, "pos") ?? "").Trim();
             var tran = Str(t, "tran");
             if (string.IsNullOrWhiteSpace(tran)) continue;
-            // Skip name-only junk lines.
             if (tran.Contains("（姓氏）", StringComparison.Ordinal) || tran.StartsWith("【名】", StringComparison.Ordinal))
                 continue;
-            senses.Add(new DictSense
-            {
-                Pos = pos,
-                PosLabel = FormatPosLabel(pos),
-                Meaning = CleanHtml(tran.Trim()),
-            });
+            senses.Add(new DictSense { Pos = pos, Meaning = CleanHtml(tran.Trim()) });
         }
     }
 
@@ -200,7 +144,7 @@ public sealed class YoudaoDictClient
             if (!string.IsNullOrWhiteSpace(head))
                 alts.Add(head.Trim());
             if (!string.IsNullOrWhiteSpace(tran))
-                senses.Add(new DictSense { Pos = "", PosLabel = "", Meaning = CleanHtml(tran.Trim()) });
+                senses.Add(new DictSense { Pos = "", Meaning = CleanHtml(tran.Trim()) });
         }
     }
 
@@ -229,35 +173,6 @@ public sealed class YoudaoDictClient
 
             if (alts.Count > 0) break;
         }
-    }
-
-    private static void CollectPhrases(JsonElement root, List<DictPhrase> phrases)
-    {
-        if (!root.TryGetProperty("phrs", out var phrs)) return;
-        if (!phrs.TryGetProperty("phrs", out var list) || list.ValueKind != JsonValueKind.Array) return;
-        foreach (var item in list.EnumerateArray())
-        {
-            var phrase = Str(item, "headword");
-            var tran = Str(item, "translation");
-            if (string.IsNullOrWhiteSpace(phrase) || string.IsNullOrWhiteSpace(tran)) continue;
-            phrases.Add(new DictPhrase
-            {
-                Phrase = phrase.Trim(),
-                Translation = CleanHtml(tran.Trim()),
-            });
-        }
-    }
-
-    private static string FormatPosLabel(string pos)
-    {
-        if (string.IsNullOrWhiteSpace(pos)) return "";
-        var key = pos.Trim().ToLowerInvariant();
-        if (!key.EndsWith('.') && PosNames.ContainsKey(key + "."))
-            key += ".";
-        var code = pos.Trim().TrimEnd('.').ToUpperInvariant();
-        if (PosNames.TryGetValue(key, out var name) || PosNames.TryGetValue(key.TrimEnd('.'), out name))
-            return $"{code}. {name}";
-        return pos.Trim();
     }
 
     private static IEnumerable<string> DedupPreserve(IEnumerable<string> items, string exclude)
